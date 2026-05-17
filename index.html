@@ -1,0 +1,1613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lock-In</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lock-In">
+<meta name="theme-color" content="#08090A">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Lock-In","short_name":"Lock-In","start_url":"./","display":"standalone","background_color":"%2308090A","theme_color":"%2308090A","icons":[{"src":"data:image/svg%2Bxml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22><rect width=%22512%22 height=%22512%22 rx=%2296%22 fill=%22%230F1117%22/><text x=%22256%22 y=%22360%22 font-family=%22-apple-system,sans-serif%22 font-size=%22320%22 font-weight=%22800%22 text-anchor=%22middle%22 fill=%22%2316D9A8%22>L</text></svg>","sizes":"512x512","type":"image/svg+xml"}]}'>
+<link rel="apple-touch-icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="%230F1117"/><text x="256" y="360" font-family="-apple-system,sans-serif" font-size="320" font-weight="800" text-anchor="middle" fill="%2316D9A8">L</text></svg>'>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/dexie@3.2.7/dist/dexie.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#08090A;
+    --surface:#0F1117;
+    --surface-2:#161922;
+    --hairline:rgba(255,255,255,.05);
+    --text:#FFFFFF;
+    --text-2:#9098A8;
+    --text-3:#5A5F6E;
+    --recovery:#16D9A8;
+    --strain:#F5B546;
+    --stress:#FF5963;
+    --sleep:#5BA3FF;
+    --accent:#16D9A8;
+  }
+  *{-webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",sans-serif;letter-spacing:-0.01em;}
+  body{padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top);}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  .display{font-weight:700;letter-spacing:-0.04em;}
+
+  .card{
+    background:
+      radial-gradient(120% 60% at 0% 0%, rgba(255,255,255,.035), transparent 60%),
+      var(--surface);
+    border-radius:20px;
+    padding:20px;
+    position:relative;
+    overflow:hidden;
+  }
+  .card-glow-recovery::before,.card-glow-strain::before,.card-glow-stress::before,.card-glow-sleep::before{
+    content:'';position:absolute;top:-40px;right:-40px;width:140px;height:140px;border-radius:50%;filter:blur(40px);opacity:.20;pointer-events:none;
+  }
+  .card-glow-recovery::before{background:var(--recovery);}
+  .card-glow-strain::before{background:var(--strain);}
+  .card-glow-stress::before{background:var(--stress);}
+  .card-glow-sleep::before{background:var(--sleep);}
+
+  .btn{
+    background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.08);
+    color:var(--text);border-radius:14px;padding:14px 18px;font-weight:600;min-height:48px;font-size:15px;
+    transition:transform .08s;
+  }
+  .btn:active{transform:scale(.98);}
+  .btn-primary{
+    background:linear-gradient(180deg, var(--recovery), #0FB890);
+    color:#03110D;border:none;
+  }
+  .btn-danger{background:linear-gradient(180deg, var(--stress), #D9404C);border:none;color:#fff;}
+
+  .chip{
+    padding:8px 14px;border-radius:999px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+    font-size:13px;font-weight:500;min-height:34px;color:var(--text-2);
+  }
+  .chip.active{background:var(--text);color:#000;border-color:var(--text);}
+
+  input,select,textarea{
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);color:var(--text);
+    border-radius:12px;padding:12px 14px;font-size:16px;width:100%;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--recovery);}
+  input[type=number]{font-variant-numeric:tabular-nums;}
+
+  .nav{
+    position:fixed;bottom:0;left:0;right:0;
+    background:rgba(15,17,23,.85);
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border-top:1px solid var(--hairline);
+    display:flex;padding-bottom:env(safe-area-inset-bottom);
+  }
+  .nav-btn{flex:1;padding:14px 4px 10px;text-align:center;color:var(--text-3);font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;}
+  .nav-btn.active{color:var(--text);}
+  .nav-btn .ico{display:block;font-size:18px;line-height:1;margin-bottom:4px;}
+
+  .wall{position:fixed;inset:0;background:linear-gradient(180deg,#9F1F2A,#5A0F18);z-index:50;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px;text-align:center;}
+  .scrollx{overflow-x:auto;scrollbar-width:none;}
+  .scrollx::-webkit-scrollbar{display:none;}
+  dialog{background:var(--surface);color:var(--text);border:1px solid var(--hairline);border-radius:20px;max-width:92vw;width:92vw;padding:0;}
+  dialog::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(8px);}
+
+  .spark{height:24px;width:100%;}
+  .sparkline{stroke-width:1.5;fill:none;}
+
+  /* Readiness ring */
+  .ring-wrap{position:relative;width:240px;height:240px;margin:0 auto;}
+  .ring-svg{transform:rotate(-90deg);}
+  .ring-track{stroke:rgba(255,255,255,.06);}
+  .ring-progress{stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1);}
+  .ring-center{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;}
+
+  .metric-pill{
+    background:rgba(255,255,255,.03);border:1px solid var(--hairline);border-radius:16px;padding:12px;
+  }
+
+  .session-dot{width:24px;height:8px;border-radius:4px;background:rgba(255,255,255,.08);}
+  .session-dot.filled{background:var(--recovery);}
+
+  details>summary{list-style:none;cursor:pointer;}
+  details>summary::-webkit-details-marker{display:none;}
+
+  .ex-row{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;}
+  .set-num{width:22px;color:var(--text-3);font-size:12px;font-weight:600;}
+  .set-input{width:72px !important;text-align:center;padding:10px 6px !important;}
+  .set-input-r{width:56px !important;text-align:center;padding:10px 6px !important;}
+
+  .progress-bar{height:4px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;}
+  .progress-bar>span{display:block;height:100%;background:var(--recovery);border-radius:2px;transition:width .6s;}
+
+  .hairline{border-top:1px solid var(--hairline);}
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="app" class="pb-24"></div>
+
+<nav class="nav">
+  <button class="nav-btn" data-route="today"><span class="ico">◐</span>Today</button>
+  <button class="nav-btn" data-route="log"><span class="ico">▤</span>Log</button>
+  <button class="nav-btn" data-route="week"><span class="ico">▦</span>Week</button>
+  <button class="nav-btn" data-route="checkins"><span class="ico">◉</span>Photos</button>
+  <button class="nav-btn" data-route="settings"><span class="ico">◇</span>Settings</button>
+</nav>
+
+<dialog id="modal"></dialog>
+
+<script>
+/* ============== CONSTANTS ============== */
+const EXERCISES = [
+  {id:'incline-db-press',name:'Incline Dumbbell Press',group:'push',muscle:'chest',isCompound:true},
+  {id:'incline-smith-bench',name:'Incline Smith Machine Press',group:'push',muscle:'chest',isCompound:true},
+  {id:'chest-press-machine',name:'Chest Press Machine',group:'push',muscle:'chest',isCompound:false},
+  {id:'pec-dec',name:'Pec Dec / Chest Fly',group:'push',muscle:'chest',isCompound:false},
+  {id:'cable-fly',name:'Cable Fly',group:'push',muscle:'chest',isCompound:false},
+  {id:'pushup',name:'Pushup',group:'push',muscle:'chest',isCompound:false},
+  {id:'ohp-barbell',name:'Overhead Barbell Press',group:'push',muscle:'shoulders',isCompound:true},
+  {id:'ohp-dumbbell',name:'Dumbbell Overhead Press',group:'push',muscle:'shoulders',isCompound:true},
+  {id:'lateral-raise',name:'Lateral Raises',group:'push',muscle:'shoulders',isCompound:false},
+  {id:'tricep-pushdown',name:'Tricep Pushdown',group:'push',muscle:'triceps',isCompound:false},
+  {id:'cable-katana',name:'Cable Katana Extension',group:'push',muscle:'triceps',isCompound:false},
+  {id:'deadlift',name:'Deadlift',group:'pull',muscle:'back',isCompound:true},
+  {id:'lat-pulldown',name:'Lat Pulldown',group:'pull',muscle:'back',isCompound:true},
+  {id:'machine-row',name:'Machine Row',group:'pull',muscle:'back',isCompound:true},
+  {id:'cable-row',name:'Cable Row',group:'pull',muscle:'back',isCompound:true},
+  {id:'assisted-pullup',name:'Assisted Pullup',group:'pull',muscle:'back',isCompound:true},
+  {id:'barbell-curl',name:'Barbell Curl',group:'pull',muscle:'biceps',isCompound:false},
+  {id:'cable-curl',name:'Cable Curl',group:'pull',muscle:'biceps',isCompound:false},
+  {id:'hammer-curl',name:'Hammer Curl',group:'pull',muscle:'biceps',isCompound:false},
+  {id:'squat',name:'Squat',group:'legs',muscle:'quads',isCompound:true},
+  {id:'hack-squat',name:'Hack Squat',group:'legs',muscle:'quads',isCompound:true},
+  {id:'leg-press',name:'Leg Press',group:'legs',muscle:'quads',isCompound:true},
+  {id:'leg-extension',name:'Leg Extension',group:'legs',muscle:'quads',isCompound:false},
+  {id:'leg-curl',name:'Leg Curl',group:'legs',muscle:'hamstrings',isCompound:false},
+  {id:'calf-raise',name:'Calf Raises',group:'legs',muscle:'calves',isCompound:false},
+];
+const EX_BY_ID = Object.fromEntries(EXERCISES.map(e=>[e.id,e]));
+const SPLITS = [
+  {id:'day1',name:'Chest + Back + Shoulders',exercises:['assisted-pullup','incline-db-press','lat-pulldown','pec-dec','machine-row','lateral-raise']},
+  {id:'day2',name:'Arms + Shoulders',exercises:['barbell-curl','tricep-pushdown','cable-curl','cable-katana','ohp-barbell','lateral-raise'],supersets:[['barbell-curl','tricep-pushdown']]},
+  {id:'day4',name:'Chest + Biceps',exercises:['incline-smith-bench','chest-press-machine','pec-dec','hammer-curl','barbell-curl','lateral-raise']},
+  {id:'day5',name:'Back + Triceps',exercises:['deadlift','lat-pulldown','cable-row','tricep-pushdown','cable-katana','lateral-raise']},
+  {id:'day6',name:'Legs + Shoulders',exercises:['squat','leg-press','leg-curl','leg-extension','ohp-dumbbell','lateral-raise','calf-raise']},
+  {id:'custom',name:'Custom',exercises:[]},
+];
+const TARGETS = {calories_min:1800,calories_max:2000,protein_min:140,steps_min:3000,steps_target:5000,weekly_sessions:4};
+const REST_DEFAULTS = {compound_sec:180,accessory_sec:90};
+const INTENSITIES = ['😴','😐','😤','🔥'];
+
+/* ============== DB ============== */
+const db = new Dexie('lockin');
+db.version(1).stores({
+  workouts:'++id, date, splitId',
+  body_metrics:'++id, date',
+  checkins:'++id, date',
+  health_daily:'date',
+  phase:'id',
+  settings:'key',
+  sync_queue:'++id, action_type, created_at'
+});
+db.version(2).stores({
+  health_workouts:'++id, start, type'
+});
+const Settings = {
+  async get(k,def=null){const r=await db.settings.get(k);return r?r.value:def;},
+  async set(k,v){await db.settings.put({key:k,value:v});},
+};
+
+/* ============== HELPERS ============== */
+const fmtDate = d => {const x=new Date(d);return x.toISOString().slice(0,10);};
+const today = ()=>fmtDate(new Date());
+const daysBetween = (a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);
+const weekStart = d => {const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return fmtDate(x);};
+const fmtNum = (v,dec=0)=> (v==null||isNaN(v))?'—':(+v).toFixed(dec);
+const debounce = (fn,ms)=>{let t;const w=(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};w.flush=()=>{clearTimeout(t);};return w;};
+const avg = arr => {const v=arr.filter(x=>x!=null&&!isNaN(x));return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+
+async function getPhase(){
+  let p = await db.phase.get(1);
+  if(!p){p={id:1,start_date:today(),target_weeks:12,label:'CUT'};await db.phase.put(p);}
+  return p;
+}
+function weekNumber(phaseStart,date=today()){return Math.floor(daysBetween(phaseStart,date)/7)+1;}
+
+/* ============== ROUTING ============== */
+const routes = {};
+function route(name){location.hash='#'+name;render();}
+function render(){
+  const name=(location.hash||'#today').slice(1).split('?')[0];
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.route===name));
+  (routes[name]||routes.today)();
+  checkWalls();
+}
+document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>route(b.dataset.route)));
+window.addEventListener('hashchange',render);
+
+const modal = document.getElementById('modal');
+function openModal(html){modal.innerHTML=html;modal.showModal();}
+function closeModal(){modal.close();modal.innerHTML='';}
+
+/* ============== RING + SPARKLINE ============== */
+function ring({score=0, color='#16D9A8', size=240, stroke=14}){
+  const r = (size-stroke)/2, c = 2*Math.PI*r;
+  const pct = Math.max(0,Math.min(100,score))/100;
+  const offset = c*(1-pct);
+  return `
+    <svg class="ring-svg" width="${size}" height="${size}">
+      <defs>
+        <linearGradient id="ringg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="${color}"/>
+        </linearGradient>
+      </defs>
+      <circle class="ring-track" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="${stroke}"/>
+      <circle class="ring-progress" cx="${size/2}" cy="${size/2}" r="${r}" fill="none"
+        stroke="url(#ringg)" stroke-width="${stroke}"
+        stroke-dasharray="${c}" stroke-dashoffset="${c}"
+        data-target-offset="${offset}"/>
+    </svg>`;
+}
+function animateRings(){
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.ring-progress[data-target-offset]').forEach(el=>{
+      el.style.strokeDashoffset = el.dataset.targetOffset;
+    });
+  });
+}
+function sparkline(values, color='#16D9A8', w=80, h=24){
+  const clean = values.filter(v=>v!=null&&!isNaN(v));
+  if(clean.length<2) return `<svg class="spark" viewBox="0 0 ${w} ${h}"></svg>`;
+  const min = Math.min(...clean), max = Math.max(...clean);
+  const range = max-min || 1;
+  const step = w/(values.length-1);
+  let d = '';
+  values.forEach((v,i)=>{
+    if(v==null||isNaN(v)) return;
+    const x = i*step;
+    const y = h - ((v-min)/range)*h*0.85 - h*0.075;
+    d += (d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' ';
+  });
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path class="sparkline" d="${d}" stroke="${color}"/></svg>`;
+}
+
+/* ============== READINESS SCORE ============== */
+async function computeReadiness(){
+  const last30 = await db.health_daily.orderBy('date').reverse().limit(30).toArray();
+  const last = last30[0];
+  const sleepVals = last30.map(d=>d.sleep_total_hr).filter(v=>v!=null&&!isNaN(v)&&v>0);
+  const hrvVals = last30.map(d=>d.hrv_ms).filter(v=>v!=null&&!isNaN(v)&&v>0);
+  const rhrVals = last30.map(d=>d.resting_hr).filter(v=>v!=null&&!isNaN(v)&&v>0);
+  if(!last || sleepVals.length<7 || hrvVals.length<7){
+    return {score:null, label:'—', sub:'need more data', color:'#5A5F6E'};
+  }
+  const sBase = avg(sleepVals), hBase = avg(hrvVals), rBase = avg(rhrVals);
+  const s = last.sleep_total_hr ?? sBase;
+  const h = last.hrv_ms ?? hBase;
+  const r = last.resting_hr ?? rBase;
+  // sleep score: 100 at baseline, drops 8pts per hour below, caps
+  const sleepScore = Math.max(0,Math.min(100, 100 - (sBase-s)*15));
+  // hrv score: 100 at baseline, drops/gains 4pts per ms delta from baseline (clamped)
+  const hrvScore = Math.max(0,Math.min(100, 100 + (h-hBase)*3));
+  // rhr score: 100 at baseline, drops 5pts per bpm above
+  const rhrScore = rBase ? Math.max(0,Math.min(100, 100 - (r-rBase)*5)) : 80;
+  const score = Math.round(sleepScore*0.4 + hrvScore*0.4 + rhrScore*0.2);
+  let label, sub, color;
+  if(score>=70){label='READY'; sub='push hard'; color='#16D9A8';}
+  else if(score>=45){label='MODERATE'; sub='5% off top sets'; color='#F5B546';}
+  else {label='RECOVER'; sub='rest or light only'; color='#FF5963';}
+  return {score, label, sub, color, last};
+}
+
+/* ============== TODAY ============== */
+routes.today = async () => {
+  const app = document.getElementById('app');
+  const phase = await getPhase();
+  const wk = weekNumber(phase.start_date);
+  const phasePct = Math.min(100, Math.round(wk/phase.target_weeks*100));
+
+  const wkStart = weekStart(today());
+  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
+
+  const last7 = await db.health_daily.orderBy('date').reverse().limit(7).toArray();
+  const last7Asc = last7.slice().reverse();
+  const r = await computeReadiness();
+  const slp = r.last;
+
+  const wts = await db.body_metrics.orderBy('date').reverse().limit(60).toArray();
+  const latestWt = wts[0];
+  const latestWaist = wts.find(w=>w.waist_cm!=null);
+  let wt7 = null, wtPhase = null;
+  if(latestWt){
+    const recent = wts.filter(w=>daysBetween(w.date,today())<=7).map(w=>w.weight_kg);
+    if(recent.length){const a=avg(recent); wt7 = latestWt.weight_kg - a;}
+    const atPhase = await db.body_metrics.where('date').belowOrEqual(phase.start_date).reverse().sortBy('date');
+    if(atPhase[0]) wtPhase = latestWt.weight_kg - atPhase[0].weight_kg;
+  }
+
+  const lastCk = (await db.checkins.orderBy('date').reverse().limit(1).toArray())[0];
+  const ckStale = !lastCk || daysBetween(lastCk.date,today())>6;
+
+  const hToday = await db.health_daily.get(today());
+  const cals = hToday?.calories_in, prot = hToday?.protein_g, steps = hToday?.steps;
+  const calColor = cals==null?'var(--text-3)': (cals<TARGETS.calories_min?'var(--strain)': cals>TARGETS.calories_max?'var(--stress)':'var(--recovery)');
+  const protColor = prot==null?'var(--text-3)': (prot>=TARGETS.protein_min?'var(--recovery)':'var(--strain)');
+  const stepColor = steps==null?'var(--text-3)': (steps>=TARGETS.steps_target?'var(--recovery)':steps>=TARGETS.steps_min?'var(--strain)':'var(--stress)');
+
+  const insight = await Settings.get('latest_insight','');
+  const sessionsCardRed = (new Date().getDay()===0 && new Date().getHours()>=9 && uniqueDays<4);
+
+  // sparkline data
+  const slpSpark = last7Asc.map(d=>d.sleep_total_hr);
+  const hrvSpark = last7Asc.map(d=>d.hrv_ms);
+  const rhrSpark = last7Asc.map(d=>d.resting_hr);
+
+  app.innerHTML = `
+    <header class="px-5 pt-5 pb-2 flex justify-between items-baseline">
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Week ${wk} · ${phase.label}</div>
+        <div class="text-[22px] display mt-0.5">${new Date().toLocaleDateString('en-US',{weekday:'long'})}</div>
+      </div>
+      <div class="text-xs text-[var(--text-3)] num">${phasePct}% phase</div>
+    </header>
+
+    <main class="px-5 space-y-4">
+      <section class="card" style="padding:14px;">
+        <div class="flex justify-between items-center mb-3">
+          <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">${lastCk?`Week ${lastCk.week_number||'—'} · ${lastCk.date}`:'No check-in yet'}</div>
+          ${ckStale?'<button id="btn-newckin" class="text-xs text-[var(--recovery)] font-semibold">+ new</button>':''}
+        </div>
+        ${lastCk ? `<div class="grid grid-cols-3 gap-2" id="top-photos" data-open-compare="${lastCk.id}">
+          ${['front','side','back'].map(k=>`<div class="aspect-[3/4] rounded-lg overflow-hidden bg-[var(--surface-2)]" id="top-thumb-${k}"></div>`).join('')}
+        </div>
+        <div class="text-[10px] text-[var(--text-3)] mt-2 text-center uppercase tracking-wider">tap to compare</div>` : '<button class="btn btn-primary w-full" id="btn-newckin">Take check-in photos</button>'}
+      </section>
+
+      <section class="card card-glow-recovery flex flex-col items-center pt-7 pb-6">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Readiness</div>
+        <div class="ring-wrap mt-3">
+          ${ring({score: r.score ?? 0, color: r.color, size:220, stroke:14})}
+          <div class="ring-center">
+            <div class="display text-[64px] leading-none num" style="color:${r.color}">${r.score ?? '—'}</div>
+            <div class="text-[13px] uppercase tracking-widest mt-2 font-semibold" style="color:${r.color}">${r.label}</div>
+            <div class="text-xs text-[var(--text-2)] mt-1">${r.sub}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-3 gap-3">
+        <div class="metric-pill">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Sleep</div>
+          <div class="num display text-xl mt-1" style="color:var(--sleep)">${fmtNum(slp?.sleep_total_hr,1)}<span class="text-xs text-[var(--text-3)] ml-0.5">h</span></div>
+          ${sparkline(slpSpark,'var(--sleep)')}
+        </div>
+        <div class="metric-pill">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">HRV</div>
+          <div class="num display text-xl mt-1" style="color:var(--recovery)">${fmtNum(slp?.hrv_ms,0)}</div>
+          ${sparkline(hrvSpark,'var(--recovery)')}
+        </div>
+        <div class="metric-pill">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">RHR</div>
+          <div class="num display text-xl mt-1" style="color:var(--strain)">${fmtNum(slp?.resting_hr,0)}</div>
+          ${sparkline(rhrSpark,'var(--strain)')}
+        </div>
+      </section>
+
+      ${insight ? `<details class="card">
+        <summary><div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Weekly insight</div>
+          <div class="mt-1.5 text-sm">${insight.split('\n').slice(0,2).join('<br>')}</div></summary>
+        <div class="mt-3 text-sm whitespace-pre-wrap text-[var(--text-2)] hairline pt-3">${insight}</div>
+      </details>` : ''}
+
+      <section class="card ${sessionsCardRed?'card-glow-stress':''}">
+        <div class="flex justify-between items-center mb-3">
+          <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Sessions</div>
+          <div class="num text-sm" style="color:${sessionsCardRed?'var(--stress)':'var(--text-2)'}">${uniqueDays} / ${TARGETS.weekly_sessions}</div>
+        </div>
+        <div class="flex gap-1.5">
+          ${Array.from({length:TARGETS.weekly_sessions},(_,i)=>`<div class="session-dot ${i<uniqueDays?'filled':''}" style="flex:1;"></div>`).join('')}
+        </div>
+      </section>
+
+      <section class="card card-glow-strain">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Weight · Waist</div>
+            <div class="flex items-baseline gap-4 mt-1">
+              <div class="display text-4xl num">${latestWt?fmtNum(latestWt.weight_kg,1):'—'}<span class="text-base text-[var(--text-3)] ml-1">kg</span></div>
+              <div class="display text-2xl num text-[var(--text-2)]">${latestWaist?fmtNum(latestWaist.waist_cm,1):'—'}<span class="text-xs text-[var(--text-3)] ml-1">cm</span></div>
+            </div>
+          </div>
+          <button class="text-[var(--text-2)] text-sm" id="btn-logwt">+ log</button>
+        </div>
+        <div class="text-xs text-[var(--text-2)] mt-2 num flex gap-3">
+          ${wt7!=null?`<span>${wt7>=0?'▲':'▼'} ${Math.abs(wt7).toFixed(1)} 7d</span>`:''}
+          ${wtPhase!=null?`<span>${wtPhase>=0?'▲':'▼'} ${Math.abs(wtPhase).toFixed(1)} phase</span>`:''}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Today's intake</div>
+        <div class="grid grid-cols-3 gap-3">
+          <div><div class="text-[10px] text-[var(--text-3)] uppercase">cals</div><div class="num display text-xl mt-1" style="color:${calColor}">${fmtNum(cals,0)}</div></div>
+          <div><div class="text-[10px] text-[var(--text-3)] uppercase">protein</div><div class="num display text-xl mt-1" style="color:${protColor}">${fmtNum(prot,0)}<span class="text-xs text-[var(--text-3)]">g</span></div></div>
+          <div><div class="text-[10px] text-[var(--text-3)] uppercase">steps</div><div class="num display text-xl mt-1" style="color:${stepColor}">${fmtNum(steps,0)}</div></div>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-2 gap-3">
+        <button class="btn btn-primary" onclick="route('log')">Log workout</button>
+        <button class="btn" id="btn-logwt2">Log weight</button>
+      </div>
+      ${new Date().getHours()>=21?'<button class="btn w-full" id="btn-sleep">Going to sleep</button>':''}
+    </main>
+  `;
+
+  document.getElementById('btn-logwt').onclick = openWeightModal;
+  document.getElementById('btn-logwt2').onclick = openWeightModal;
+  document.getElementById('btn-sleep')?.addEventListener('click', async ()=>{
+    await Settings.set('sleep_intent_set_at', new Date().toISOString());
+    pushState();
+    alert('Locked. Workflow will stop nagging.');
+  });
+  document.getElementById('btn-newckin')?.addEventListener('click', openCheckinModal);
+
+  if(lastCk){
+    for(const k of ['front','side','back']){
+      const blob = lastCk[k+'_photo'];
+      if(blob){
+        const url = URL.createObjectURL(blob);
+        const el = document.getElementById('top-thumb-'+k);
+        if(el) el.innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+      }
+    }
+    const tp = document.getElementById('top-photos');
+    if(tp) tp.onclick = ()=>openCompare(+tp.dataset.openCompare);
+  }
+  animateRings();
+};
+
+/* ============== WEIGHT MODAL ============== */
+async function openWeightModal(){
+  const last = (await db.body_metrics.orderBy('date').reverse().limit(1).toArray())[0];
+  const lastWaist = (await db.body_metrics.orderBy('date').reverse().toArray()).find(m=>m.waist_cm!=null);
+  openModal(`
+    <form class="p-5 space-y-4" id="wt-form">
+      <h2 class="display text-xl">Log weight</h2>
+      <input name="date" type="date" value="${today()}">
+      <input name="wt" type="number" step="0.1" inputmode="decimal" placeholder="kg" value="${last?last.weight_kg:''}" autofocus required>
+      <input name="waist" type="number" step="0.1" inputmode="decimal" placeholder="waist (cm) — optional" value="">
+      ${lastWaist?`<div class="text-xs text-[var(--text-3)]">Last waist: ${lastWaist.waist_cm} cm · ${lastWaist.date}</div>`:''}
+      <div class="flex gap-2">
+        <button type="button" class="btn flex-1" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary flex-1">Save</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('wt-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const rec = {date:e.target.date.value, weight_kg:+e.target.wt.value};
+    if(e.target.waist.value) rec.waist_cm = +e.target.waist.value;
+    await db.body_metrics.add(rec);
+    closeModal(); pushState(); render();
+  });
+}
+
+/* ============== WORKOUT LOGGER ============== */
+let workoutDraft = null;
+const saveDraft = debounce(async ()=>{
+  if(!workoutDraft) return;
+  if(workoutDraft.id){await db.workouts.update(workoutDraft.id, workoutDraft);}
+  else{const id = await db.workouts.add(workoutDraft); workoutDraft.id = id;}
+},500);
+
+async function lastSetFor(exId, excludeId=null){
+  const all = await db.workouts.orderBy('date').reverse().toArray();
+  for(const w of all){
+    if(w.id===excludeId) continue;
+    const ex = (w.exercises||[]).find(e=>e.exerciseId===exId);
+    if(ex){
+      const top = (ex.sets||[]).filter(s=>s.weight&&s.reps).sort((a,b)=>(b.weight*b.reps)-(a.weight*a.reps))[0];
+      if(top) return top;
+    }
+  }
+  return null;
+}
+
+routes.log = async () => {
+  const app = document.getElementById('app');
+  const todays = await db.workouts.where('date').equals(today()).toArray();
+  if(!workoutDraft || workoutDraft.date!==today()){
+    workoutDraft = todays[0] || {date:today(), splitId:'day1', intensity:null, exercises:[], created_at:Date.now()};
+  }
+  if(!workoutDraft.exercises.length){
+    const split = SPLITS.find(s=>s.id===workoutDraft.splitId) || SPLITS[0];
+    workoutDraft.exercises = split.exercises.map(eid=>{
+      const ssIdx = (split.supersets||[]).findIndex(g=>g.includes(eid));
+      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]};
+    });
+  }
+
+  app.innerHTML = `
+    <header class="px-5 pt-5 pb-3 flex justify-between items-baseline">
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Workout</div>
+        <div class="display text-[22px] mt-0.5">${workoutDraft.date}</div>
+      </div>
+      <button class="text-[var(--recovery)] text-sm font-semibold" id="btn-finish">Finish</button>
+    </header>
+    <main class="px-5 space-y-4">
+      <div class="scrollx flex gap-2 -mx-1 px-1 pb-1">
+        ${SPLITS.map(s=>`<button class="chip whitespace-nowrap ${s.id===workoutDraft.splitId?'active':''}" data-split="${s.id}">${s.name}</button>`).join('')}
+      </div>
+      <div class="flex gap-2">
+        ${INTENSITIES.map(e=>`<button class="chip flex-1 text-lg ${workoutDraft.intensity===e?'active':''}" data-int="${e}">${e}</button>`).join('')}
+      </div>
+      <div id="ex-list" class="space-y-3"></div>
+      <button class="btn w-full" id="btn-add-ex">+ Add exercise</button>
+    </main>
+  `;
+
+  document.querySelectorAll('[data-split]').forEach(b=>b.onclick=()=>{
+    workoutDraft.splitId = b.dataset.split;
+    const split = SPLITS.find(s=>s.id===b.dataset.split);
+    workoutDraft.exercises = split.exercises.map(eid=>{
+      const ssIdx = (split.supersets||[]).findIndex(g=>g.includes(eid));
+      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]};
+    });
+    saveDraft(); routes.log();
+  });
+  document.querySelectorAll('[data-int]').forEach(b=>b.onclick=()=>{
+    workoutDraft.intensity = b.dataset.int; saveDraft(); routes.log();
+  });
+  document.getElementById('btn-add-ex').onclick = openAddExerciseModal;
+  document.getElementById('btn-finish').onclick = async ()=>{
+    saveDraft.flush();
+    await db.workouts.put(workoutDraft);
+    workoutDraft = null;
+    pushState();
+    route('today');
+  };
+  await renderExList();
+};
+
+async function renderExList(){
+  const wrap = document.getElementById('ex-list');
+  if(!wrap) return;
+  const blocks = [];
+  for(let i=0;i<workoutDraft.exercises.length;i++){
+    const e = workoutDraft.exercises[i];
+    const meta = EX_BY_ID[e.exerciseId] || {name:e.exerciseId,isCompound:false,muscle:''};
+    const last = await lastSetFor(e.exerciseId, workoutDraft.id);
+    const nudge = last ? `Try ${last.weight}kg × ${last.reps+1} or ${(+last.weight+2.5)}kg × ${last.reps}` : 'first session — set a baseline';
+    const ssTag = e.ssGroup!=null ? `<span style="background:var(--recovery);color:#03110D;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-right:6px;">SS${String.fromCharCode(65+e.ssGroup)}</span>` : '';
+    const ssBorder = e.ssGroup!=null ? `border-left:2px solid var(--recovery);` : '';
+    blocks.push(`
+      <div class="card" style="padding:16px;${ssBorder}">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <div class="display text-base">${ssTag}${meta.name}</div>
+            <div class="text-[11px] uppercase tracking-wider text-[var(--text-3)] mt-0.5">${meta.muscle}</div>
+            <div class="text-xs text-[var(--text-2)] mt-1">${last?`Last: ${last.weight}kg × ${last.reps}`:'no history'}</div>
+            <div class="text-xs mt-0.5" style="color:var(--recovery)">${nudge}</div>
+          </div>
+          <button class="text-[var(--text-3)]" data-rm-ex="${i}">✕</button>
+        </div>
+        <div class="space-y-2">
+          ${e.sets.map((s,j)=>`
+            <div class="ex-row">
+              <span class="set-num">${j+1}</span>
+              <div class="flex items-center gap-1">
+                <input class="set-input num" type="number" step="0.5" inputmode="decimal" placeholder="kg" value="${s.weight}" data-set-w="${i}-${j}">
+                <span class="text-[var(--text-3)] text-sm">×</span>
+                <input class="set-input-r num" type="number" inputmode="numeric" placeholder="reps" value="${s.reps}" data-set-r="${i}-${j}">
+              </div>
+              <span></span>
+              <button class="text-[var(--text-3)] text-sm px-1" data-rm-set="${i}-${j}">✕</button>
+              <button class="text-[var(--recovery)] text-base px-2" data-rest="${meta.isCompound?REST_DEFAULTS.compound_sec:REST_DEFAULTS.accessory_sec}">▶</button>
+            </div>`).join('')}
+        </div>
+        <button class="text-xs text-[var(--text-2)] mt-3" data-add-set="${i}">+ add set</button>
+      </div>`);
+  }
+  wrap.innerHTML = blocks.join('');
+
+  wrap.querySelectorAll('[data-set-w]').forEach(inp=>inp.oninput = e=>{
+    const [i,j] = e.target.dataset.setW.split('-').map(Number);
+    workoutDraft.exercises[i].sets[j].weight = e.target.value; saveDraft();
+  });
+  wrap.querySelectorAll('[data-set-r]').forEach(inp=>inp.oninput = e=>{
+    const [i,j] = e.target.dataset.setR.split('-').map(Number);
+    workoutDraft.exercises[i].sets[j].reps = e.target.value; saveDraft();
+  });
+  wrap.querySelectorAll('[data-rm-set]').forEach(b=>b.onclick=()=>{
+    const [i,j] = b.dataset.rmSet.split('-').map(Number);
+    workoutDraft.exercises[i].sets.splice(j,1); saveDraft(); renderExList();
+  });
+  wrap.querySelectorAll('[data-add-set]').forEach(b=>b.onclick=()=>{
+    workoutDraft.exercises[+b.dataset.addSet].sets.push({weight:'',reps:''}); saveDraft(); renderExList();
+  });
+  wrap.querySelectorAll('[data-rm-ex]').forEach(b=>b.onclick=()=>{
+    workoutDraft.exercises.splice(+b.dataset.rmEx,1); saveDraft(); renderExList();
+  });
+  wrap.querySelectorAll('[data-rest]').forEach(b=>b.onclick=()=>startRest(+b.dataset.rest));
+}
+
+function openAddExerciseModal(){
+  openModal(`
+    <div class="p-5 space-y-3">
+      <h2 class="display text-xl">Add exercise</h2>
+      <input id="ex-q" placeholder="search…" autofocus>
+      <div id="ex-results" class="max-h-[50vh] overflow-y-auto space-y-1.5"></div>
+      <button class="btn w-full" onclick="closeModal()">Close</button>
+    </div>
+  `);
+  const q = document.getElementById('ex-q');
+  const results = document.getElementById('ex-results');
+  const renderR = ()=>{
+    const term = q.value.toLowerCase();
+    const list = EXERCISES.filter(e=>!term||e.name.toLowerCase().includes(term)||e.muscle.includes(term)).slice(0,30);
+    results.innerHTML = list.map(e=>`<button class="w-full text-left rounded-xl p-3" style="background:rgba(255,255,255,.03);border:1px solid var(--hairline);" data-ex="${e.id}"><div class="text-sm">${e.name}</div><div class="text-[11px] text-[var(--text-3)] uppercase tracking-wider">${e.muscle}</div></button>`).join('');
+    results.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{
+      workoutDraft.exercises.push({exerciseId:b.dataset.ex, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]});
+      saveDraft(); closeModal(); renderExList();
+    });
+  };
+  q.oninput=renderR; renderR();
+}
+
+/* ============== REST TIMER ============== */
+async function startRest(sec){
+  const end = Date.now()+sec*1000;
+  const topic = await Settings.get('ntfy_topic');
+  if(topic){
+    try{await fetch(`https://ntfy.sh/${topic}`,{method:'POST',headers:{'Title':'Rest done','Delay':sec+'s'},body:'Rest complete — next set'});}
+    catch(e){console.warn('ntfy push failed',e);}
+  }
+  const bar = document.createElement('div');
+  bar.style.cssText='position:fixed;top:max(env(safe-area-inset-top),16px);left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--recovery);border-radius:999px;padding:10px 18px;font-size:14px;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,.5);';
+  bar.className='num';
+  document.body.appendChild(bar);
+  const tick = ()=>{
+    const left = Math.max(0,Math.round((end-Date.now())/1000));
+    bar.textContent = `${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+    if(left<=0){bar.remove(); return;}
+    setTimeout(tick,250);
+  };
+  tick();
+}
+
+/* ============== CHECKINS ============== */
+routes.checkins = async ()=>{
+  const app = document.getElementById('app');
+  const list = await db.checkins.orderBy('date').reverse().toArray();
+  app.innerHTML = `
+    <header class="px-5 pt-5 pb-3 flex justify-between items-baseline">
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Photos</div>
+        <div class="display text-[22px] mt-0.5">Weekly check-ins</div>
+      </div>
+      <button class="text-[var(--recovery)] text-sm font-semibold" id="btn-newckin2">+ new</button>
+    </header>
+    <main class="px-5 space-y-3">
+      ${list.map(c=>`
+        <div class="card" data-open="${c.id}" style="padding:14px;">
+          <div class="flex justify-between text-xs mb-3">
+            <span class="text-[var(--text-2)]">Week ${c.week_number||'—'} · ${c.date}</span>
+            <span class="num text-[var(--text-3)]">${fmtNum(c.weight_kg,1)} kg</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            ${['front','side','back'].map(k=>`<div class="aspect-[3/4] rounded-lg overflow-hidden bg-[var(--surface-2)]" id="ck-${c.id}-${k}"></div>`).join('')}
+          </div>
+        </div>`).join('') || '<div class="text-[var(--text-3)] text-sm">No check-ins yet.</div>'}
+      ${list.length?'<button class="btn w-full" id="btn-zip">Export all photos as ZIP</button>':''}
+    </main>
+  `;
+  document.getElementById('btn-newckin2').onclick = openCheckinModal;
+  document.getElementById('btn-zip')?.addEventListener('click', exportPhotosZip);
+  for(const c of list){
+    for(const k of ['front','side','back']){
+      const blob = c[k+'_photo'];
+      if(blob){
+        const url = URL.createObjectURL(blob);
+        const el = document.getElementById(`ck-${c.id}-${k}`);
+        if(el) el.innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+      }
+    }
+  }
+  document.querySelectorAll('[data-open]').forEach(el=>el.onclick=()=>openCompare(+el.dataset.open));
+};
+
+async function resizeImage(file, maxDim=1080, quality=0.7){
+  const img = await createImageBitmap(file);
+  const scale = Math.min(maxDim/img.width, maxDim/img.height, 1);
+  const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+  if(typeof OffscreenCanvas!=='undefined'){
+    const canvas = new OffscreenCanvas(w,h);
+    canvas.getContext('2d').drawImage(img,0,0,w,h);
+    return await canvas.convertToBlob({type:'image/jpeg',quality});
+  } else {
+    const canvas = document.createElement('canvas');
+    canvas.width=w; canvas.height=h;
+    canvas.getContext('2d').drawImage(img,0,0,w,h);
+    return await new Promise(res=>canvas.toBlob(res,'image/jpeg',quality));
+  }
+}
+
+let pendingCkin = {};
+function openCheckinModal(){pendingCkin = {}; renderCkinModal();}
+function renderCkinModal(){
+  const labels = {front:'Front', side:'Side', back:'Back'};
+  openModal(`
+    <div class="p-5 space-y-4">
+      <h2 class="display text-xl">New check-in</h2>
+      <div class="grid grid-cols-3 gap-2">
+        ${['front','side','back'].map(k=>`
+          <label class="aspect-[3/4] flex items-center justify-center text-center text-sm cursor-pointer overflow-hidden rounded-xl" style="background:var(--surface-2);border:1px solid var(--hairline);" id="pck-${k}">
+            <input type="file" accept="image/*" capture="environment" class="hidden" data-cap="${k}">
+            ${pendingCkin[k]?'<span class="text-[var(--recovery)] text-2xl">✓</span>':'<div><div class="text-[var(--text-3)] text-xl mb-1">📷</div><div class="text-xs text-[var(--text-2)]">'+labels[k]+'</div></div>'}
+          </label>`).join('')}
+      </div>
+      <div class="flex gap-2">
+        <button class="btn flex-1" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary flex-1" id="btn-ckin-next" ${Object.keys(pendingCkin).length<3?'disabled style="opacity:.4"':''}>Next</button>
+      </div>
+    </div>
+  `);
+  document.querySelectorAll('[data-cap]').forEach(inp=>inp.onchange=async e=>{
+    const k = e.target.dataset.cap;
+    const f = e.target.files[0]; if(!f) return;
+    pendingCkin[k] = await resizeImage(f);
+    renderCkinModal();
+  });
+  for(const k of Object.keys(pendingCkin)){
+    const url = URL.createObjectURL(pendingCkin[k]);
+    const el = document.getElementById('pck-'+k);
+    if(el) el.innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+  }
+  document.getElementById('btn-ckin-next').onclick = async ()=>{
+    if(Object.keys(pendingCkin).length<3) return;
+    const last = (await db.body_metrics.orderBy('date').reverse().limit(1).toArray())[0];
+    const lastWaistRec = (await db.body_metrics.orderBy('date').reverse().toArray()).find(m=>m.waist_cm!=null);
+    openModal(`
+      <form id="ckwt-f" class="p-5 space-y-3">
+        <h2 class="display text-xl">Measurements</h2>
+        <label class="text-[11px] uppercase tracking-wider text-[var(--text-3)]">Weight (kg)</label>
+        <input name="wt" type="number" step="0.1" inputmode="decimal" value="${last?last.weight_kg:''}" autofocus required>
+        <label class="text-[11px] uppercase tracking-wider text-[var(--text-3)]">Waist (cm)</label>
+        <input name="waist" type="number" step="0.1" inputmode="decimal" value="${lastWaistRec?lastWaistRec.waist_cm:''}" placeholder="optional">
+        <div class="flex gap-2">
+          <button type="button" class="btn flex-1" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary flex-1">Save check-in</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('ckwt-f').onsubmit = async e=>{
+      e.preventDefault();
+      const wt = +e.target.wt.value;
+      const waist = e.target.waist.value ? +e.target.waist.value : null;
+      const phase = await getPhase();
+      const rec = {
+        date: today(),
+        week_number: weekNumber(phase.start_date),
+        weight_kg: wt,
+        front_photo: pendingCkin.front, side_photo: pendingCkin.side, back_photo: pendingCkin.back,
+      };
+      if(waist!=null) rec.waist_cm = waist;
+      const id = await db.checkins.add(rec);
+      const bmRec = {date: today(), weight_kg: wt};
+      if(waist!=null) bmRec.waist_cm = waist;
+      await db.body_metrics.add(bmRec);
+      pendingCkin = {}; closeModal(); pushState();
+      pushCheckinBundle(id).catch(e=>console.warn('bundle push failed', e));
+      await showCheckinJudgment(id);
+    };
+  };
+}
+
+async function openCompare(id){
+  const list = await db.checkins.orderBy('date').toArray();
+  const cur = list.find(c=>c.id===id);
+  const first = list[0];
+  let angle='front', leftId=first.id, rightId=cur.id;
+  const draw = ()=>{
+    const L = list.find(c=>c.id===leftId), R = list.find(c=>c.id===rightId);
+    const urlL = URL.createObjectURL(L[angle+'_photo']);
+    const urlR = URL.createObjectURL(R[angle+'_photo']);
+    openModal(`
+      <div class="p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="display text-lg">Compare</h3>
+          <button class="text-[var(--text-2)] text-sm" onclick="closeModal()">Close</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><img src="${urlL}" class="w-full rounded-xl"><div class="text-[11px] mt-2 text-center text-[var(--text-2)]">Wk ${L.week_number||'—'} · ${L.date} · ${fmtNum(L.weight_kg,1)}kg</div></div>
+          <div><img src="${urlR}" class="w-full rounded-xl"><div class="text-[11px] mt-2 text-center text-[var(--text-2)]">Wk ${R.week_number||'—'} · ${R.date} · ${fmtNum(R.weight_kg,1)}kg</div></div>
+        </div>
+        <div class="flex gap-2 justify-center">
+          ${['front','side','back'].map(a=>`<button class="chip ${a===angle?'active':''}" data-a="${a}">${a}</button>`).join('')}
+        </div>
+        <div class="flex gap-2 text-sm">
+          <select id="leftSel">${list.map(c=>`<option value="${c.id}" ${c.id===leftId?'selected':''}>Wk ${c.week_number||'—'} · ${c.date}</option>`).join('')}</select>
+          <select id="rightSel">${list.map(c=>`<option value="${c.id}" ${c.id===rightId?'selected':''}>Wk ${c.week_number||'—'} · ${c.date}</option>`).join('')}</select>
+        </div>
+      </div>
+    `);
+    document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{angle=b.dataset.a;draw();});
+    document.getElementById('leftSel').onchange=e=>{leftId=+e.target.value;draw();};
+    document.getElementById('rightSel').onchange=e=>{rightId=+e.target.value;draw();};
+  };
+  draw();
+}
+
+async function showCheckinJudgment(currentId){
+  const list = await db.checkins.orderBy('date').toArray();
+  const cur = list.find(c=>c.id===currentId);
+  const prev = list.filter(c=>c.id!==currentId).at(-1);  // most recent previous
+  const phase = await getPhase();
+  const isCut = /CUT/i.test(phase.label);
+  const isBulk = /BULK/i.test(phase.label);
+
+  if(!prev){
+    openModal(`
+      <div class="p-5 space-y-3">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Week ${cur.week_number||'—'}</div>
+        <h2 class="display text-2xl">Baseline saved.</h2>
+        <p class="text-sm text-[var(--text-2)]">This is your first check-in. Next week we'll have something to compare.</p>
+        <button class="btn btn-primary w-full" onclick="closeModal();render();">Done</button>
+      </div>
+    `);
+    return;
+  }
+
+  const days = Math.max(1, daysBetween(prev.date, cur.date));
+  const weeks = days/7;
+  const wtΔ = cur.weight_kg - prev.weight_kg;
+  const wtΔPct = (wtΔ / prev.weight_kg) * 100;
+  const wtRatePct = wtΔPct / weeks;  // %bw per week
+  const waistΔ = (cur.waist_cm!=null && prev.waist_cm!=null) ? cur.waist_cm - prev.waist_cm : null;
+
+  // verdict based on phase and rate
+  let verdict, vColor;
+  const absRate = Math.abs(wtRatePct);
+  if(isCut){
+    if(wtΔ>0.2) {verdict = 'Weight up. If waist also up, recheck kcal. If waist flat or down, likely water/glycogen — hold the line.'; vColor='var(--strain)';}
+    else if(absRate < 0.2) {verdict = 'No meaningful change. Drop kcal by ~100 or add 1500 steps/day. Don\'t crank protein further.'; vColor='var(--strain)';}
+    else if(absRate <= 1.0) {verdict = 'On target. Hold current intake.'; vColor='var(--recovery)';}
+    else {verdict = 'Cutting too fast. Add 100-150 kcal. You\'ll lose muscle and HRV at this rate.'; vColor='var(--stress)';}
+  } else if(isBulk){
+    if(wtΔ<-0.2) {verdict = 'Weight down on a bulk. Add 200 kcal, recheck adherence.'; vColor='var(--stress)';}
+    else if(absRate < 0.15) {verdict = 'Stalled. Add 150 kcal.'; vColor='var(--strain)';}
+    else if(absRate <= 0.5) {verdict = 'On target lean bulk pace.'; vColor='var(--recovery)';}
+    else {verdict = 'Gaining too fast — fat gain risk. Trim 150 kcal.'; vColor='var(--strain)';}
+  } else {
+    verdict = absRate < 0.2 ? 'Holding stable.' : `${wtΔ>0?'Gaining':'Losing'} at ${absRate.toFixed(2)}% bw/wk.`;
+    vColor='var(--text-2)';
+  }
+
+  const urlPrev = URL.createObjectURL(prev.front_photo);
+  const urlCur = URL.createObjectURL(cur.front_photo);
+
+  openModal(`
+    <div class="p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Week ${cur.week_number||'—'} judgment</div>
+        <h2 class="display text-2xl mt-1">${days}d since last</h2>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div><img src="${urlPrev}" class="w-full rounded-xl"><div class="text-[10px] mt-1 text-center text-[var(--text-3)] uppercase tracking-wider">Wk ${prev.week_number||'—'}</div></div>
+        <div><img src="${urlCur}" class="w-full rounded-xl"><div class="text-[10px] mt-1 text-center text-[var(--text-3)] uppercase tracking-wider">Now</div></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="card" style="padding:14px;">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Weight Δ</div>
+          <div class="display text-2xl num mt-1" style="color:${wtΔ<0?'var(--recovery)':wtΔ>0?'var(--strain)':'var(--text-2)'}">${wtΔ>=0?'+':''}${wtΔ.toFixed(1)}<span class="text-xs text-[var(--text-3)]">kg</span></div>
+          <div class="text-xs text-[var(--text-2)] mt-1 num">${wtRatePct>=0?'+':''}${wtRatePct.toFixed(2)}% bw/wk</div>
+        </div>
+        <div class="card" style="padding:14px;">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Waist Δ</div>
+          ${waistΔ!=null
+            ? `<div class="display text-2xl num mt-1" style="color:${waistΔ<0?'var(--recovery)':waistΔ>0?'var(--strain)':'var(--text-2)'}">${waistΔ>=0?'+':''}${waistΔ.toFixed(1)}<span class="text-xs text-[var(--text-3)]">cm</span></div>
+               <div class="text-xs text-[var(--text-2)] mt-1 num">${prev.waist_cm} → ${cur.waist_cm}</div>`
+            : `<div class="display text-2xl num mt-1 text-[var(--text-3)]">—</div>
+               <div class="text-xs text-[var(--text-3)] mt-1">log waist to track</div>`}
+        </div>
+      </div>
+
+      <div class="card" style="padding:16px;border-left:3px solid ${vColor};">
+        <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)] mb-1">Verdict</div>
+        <div class="text-sm" style="color:${vColor}">${verdict}</div>
+      </div>
+
+      <button class="btn btn-primary w-full" onclick="closeModal();render();">Done</button>
+    </div>
+  `);
+}
+
+async function exportPhotosZip(){
+  const list = await db.checkins.orderBy('date').toArray();
+  const zip = new JSZip();
+  for(const c of list){
+    for(const k of ['front','side','back']){
+      if(c[k+'_photo']) zip.file(`${c.date}_wk${c.week_number||'x'}_${k}.jpg`, c[k+'_photo']);
+    }
+  }
+  const blob = await zip.generateAsync({type:'blob'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `lockin-photos-${today()}.zip`; a.click();
+}
+
+/* ============== WEEK ============== */
+routes.week = async ()=>{
+  const app = document.getElementById('app');
+  const wkStart = weekStart(today());
+  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
+  const sessionPct = (uniqueDays / TARGETS.weekly_sessions) * 100;
+  const wts = await db.body_metrics.orderBy('date').reverse().limit(90).toArray();
+  const h7 = await db.health_daily.orderBy('date').reverse().limit(7).toArray();
+  const avgCals = avg(h7.map(d=>d.calories_in));
+  const avgProt = avg(h7.map(d=>d.protein_g));
+  const avgSleep = avg(h7.map(d=>d.sleep_total_hr));
+  const avgHrv = avg(h7.map(d=>d.hrv_ms));
+  const daysHitProt = h7.filter(d=>d.protein_g>=TARGETS.protein_min).length;
+
+  app.innerHTML = `
+    <header class="px-5 pt-5 pb-3">
+      <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">This week</div>
+      <div class="display text-[22px] mt-0.5">${wkStart} →</div>
+    </header>
+    <main class="px-5 space-y-4">
+      <section class="card card-glow-recovery flex flex-col items-center pt-7 pb-6">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Sessions</div>
+        <div class="ring-wrap mt-3" style="width:200px;height:200px;">
+          ${ring({score: sessionPct, color: sessionPct>=100?'#16D9A8':sessionPct>=75?'#F5B546':'#FF5963', size:200, stroke:12})}
+          <div class="ring-center">
+            <div class="display text-[56px] leading-none num">${uniqueDays}<span class="text-[var(--text-3)] text-2xl">/${TARGETS.weekly_sessions}</span></div>
+            <div class="text-[11px] uppercase tracking-widest mt-1 text-[var(--text-2)]">sessions</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-2 gap-3">
+        <div class="card" style="padding:16px;"><div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Avg sleep</div><div class="display text-2xl mt-1 num" style="color:var(--sleep)">${fmtNum(avgSleep,1)}<span class="text-xs text-[var(--text-3)]">h</span></div></div>
+        <div class="card" style="padding:16px;"><div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Avg HRV</div><div class="display text-2xl mt-1 num" style="color:var(--recovery)">${fmtNum(avgHrv,0)}</div></div>
+        <div class="card" style="padding:16px;"><div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Avg cals</div><div class="display text-2xl mt-1 num">${fmtNum(avgCals,0)}</div></div>
+        <div class="card" style="padding:16px;"><div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Protein hit</div><div class="display text-2xl mt-1 num">${daysHitProt}<span class="text-xs text-[var(--text-3)]">/7</span></div><div class="text-xs text-[var(--text-2)] mt-1 num">avg ${fmtNum(avgProt,0)}g</div></div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-2">Body weight · 90 days</div>
+        <canvas id="wtChart" height="160"></canvas>
+      </section>
+    </main>
+  `;
+
+  if(wts.length){
+    const sorted = wts.slice().reverse();
+    new Chart(document.getElementById('wtChart'),{
+      type:'line',
+      data:{labels:sorted.map(w=>w.date),datasets:[{data:sorted.map(w=>w.weight_kg),borderColor:'#16D9A8',backgroundColor:'rgba(22,217,168,.08)',tension:.35,fill:true,pointRadius:0,borderWidth:2}]},
+      options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#5A5F6E',maxTicksLimit:5},grid:{display:false}},y:{ticks:{color:'#5A5F6E'},grid:{color:'rgba(255,255,255,.04)'}}}}
+    });
+  }
+  animateRings();
+};
+
+/* ============== SETTINGS + HEALTH IMPORT ============== */
+routes.settings = async ()=>{
+  const app = document.getElementById('app');
+  const phase = await getPhase();
+  const ghTok = await Settings.get('github_token','');
+  const ghRepo = await Settings.get('github_repo','');
+  const ntfy = await Settings.get('ntfy_topic','');
+  const lastSync = await Settings.get('last_health_sync_at','never');
+  const lastPush = await Settings.get('last_state_push_at','never');
+  const queueLen = await db.sync_queue.count();
+  const persisted = await (navigator.storage?.persisted?.() || Promise.resolve(false));
+  const dayCount = await db.health_daily.count();
+  const wkCount = await db.workouts.count();
+
+  app.innerHTML = `
+    <header class="px-5 pt-5 pb-3">
+      <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Settings</div>
+      <div class="display text-[22px] mt-0.5">Configuration</div>
+    </header>
+    <main class="px-5 space-y-4">
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Phase</div>
+        <div class="space-y-2">
+          <input id="ph-start" type="date" value="${phase.start_date}">
+          <input id="ph-weeks" type="number" value="${phase.target_weeks}" placeholder="weeks">
+          <input id="ph-label" value="${phase.label}" placeholder="label (CUT / BULK)">
+          <button class="btn btn-primary w-full" id="ph-save">Save phase</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Apple Health</div>
+        <label class="btn btn-primary w-full block text-center cursor-pointer">Import CSV or JSON<input type="file" id="hae-file" accept=".csv,.json,application/json,text/csv" class="hidden"></label>
+        <div class="text-xs text-[var(--text-3)] mt-2">Last sync: ${lastSync} · ${dayCount} days · ${wkCount} workouts</div>
+        <div id="hae-status" class="text-xs mt-1"></div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">GitHub state sync</div>
+        <div class="space-y-2">
+          <input id="gh-tok" type="password" placeholder="PAT" value="${ghTok}">
+          <input id="gh-repo" placeholder="username/repo" value="${ghRepo}">
+          <div class="flex gap-2">
+            <button class="btn flex-1" id="gh-save">Save</button>
+            <button class="btn flex-1" id="gh-push">Force push</button>
+          </div>
+          <div class="text-xs text-[var(--text-3)]">Last push: ${lastPush} · queued: ${queueLen}</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">ntfy push</div>
+        <div class="space-y-2">
+          <input id="ntfy-topic" placeholder="topic" value="${ntfy}">
+          <div class="flex gap-2">
+            <button class="btn flex-1" id="ntfy-save">Save</button>
+            <button class="btn flex-1" id="ntfy-test">Test</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Storage</div>
+        <div class="text-xs text-[var(--text-2)]">${persisted?'Persistent storage granted':'Not yet granted'}</div>
+        <button class="btn w-full mt-2" id="persist-req">Request persistence</button>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Data</div>
+        <div class="space-y-2">
+          <button class="btn w-full" id="export-json">Export all data (JSON)</button>
+          <button class="btn w-full" id="export-photos">Export photos (ZIP)</button>
+          <button class="btn w-full" id="wipe-manual">Wipe manual weight/waist (keep Apple Health)</button>
+          <button class="btn w-full" id="wipe-health">Wipe all Apple Health data (re-import next)</button>
+          <button class="btn btn-danger w-full" id="reset-all">Reset everything</button>
+        </div>
+      </section>
+    </main>
+  `;
+
+  document.getElementById('ph-save').onclick = async ()=>{
+    await db.phase.put({id:1,start_date:document.getElementById('ph-start').value,target_weeks:+document.getElementById('ph-weeks').value,label:document.getElementById('ph-label').value});
+    pushState(); alert('Saved.');
+  };
+  document.getElementById('gh-save').onclick = async ()=>{
+    await Settings.set('github_token', document.getElementById('gh-tok').value);
+    await Settings.set('github_repo', document.getElementById('gh-repo').value);
+    alert('Saved.');
+  };
+  document.getElementById('gh-push').onclick = async ()=>{await pushState(true); render();};
+  document.getElementById('ntfy-save').onclick = async ()=>{await Settings.set('ntfy_topic',document.getElementById('ntfy-topic').value);alert('Saved.');};
+  document.getElementById('ntfy-test').onclick = async ()=>{
+    const t = await Settings.get('ntfy_topic');
+    if(!t) return alert('Set topic first.');
+    try{await fetch(`https://ntfy.sh/${t}`,{method:'POST',body:'Lock-In test push'});alert('Sent.');}catch(e){alert('Failed: '+e.message);}
+  };
+  document.getElementById('persist-req').onclick = async ()=>{
+    if(navigator.storage?.persist){const r = await navigator.storage.persist();alert(r?'Granted.':'Denied.');render();}
+  };
+  document.getElementById('hae-file').onchange = e=>importHealth(e.target.files[0]);
+  document.getElementById('export-json').onclick = exportAllJson;
+  document.getElementById('export-photos').onclick = exportPhotosZip;
+  document.getElementById('wipe-manual').onclick = async ()=>{
+    const manual = (await db.body_metrics.toArray()).filter(b=>b.source!=='apple_health');
+    if(!manual.length) return alert('No manual entries to wipe.');
+    if(!confirm(`Delete ${manual.length} manual weight/waist entries? Apple Health rows kept.`)) return;
+    await db.body_metrics.bulkDelete(manual.map(m=>m.id));
+    alert('Done. Today screen will refresh.');
+    render();
+  };
+  document.getElementById('wipe-health').onclick = async ()=>{
+    if(!confirm('Wipe all Apple Health-imported data (health_daily + apple_health weight/waist + HAE workouts)? Manual entries and Lock-In workouts preserved.')) return;
+    await db.health_daily.clear();
+    const ah = (await db.body_metrics.toArray()).filter(b=>b.source==='apple_health');
+    await db.body_metrics.bulkDelete(ah.map(a=>a.id));
+    if(db.health_workouts) await db.health_workouts.clear();
+    await Settings.set('last_health_sync_at', 'never');
+    await Settings.set('last_hae_pushed_at', '');
+    alert('Cleared. Re-import the CSV to refill.');
+    render();
+  };
+  document.getElementById('reset-all').onclick = async ()=>{
+    if(!confirm('Wipe ALL data?')) return;
+    if(!confirm('Last chance.')) return;
+    await db.delete(); location.reload();
+  };
+};
+
+async function exportAllJson(){
+  const out = {};
+  for(const t of ['workouts','body_metrics','health_daily','phase','settings']){out[t] = await db[t].toArray();}
+  out.checkins = (await db.checkins.toArray()).map(c=>({...c,front_photo:'<blob>',side_photo:'<blob>',back_photo:'<blob>'}));
+  const blob = new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `lockin-export-${today()}.json`; a.click();
+}
+
+/* ============== HEALTH IMPORT (CSV + JSON) ============== */
+const CSV_MAP = {
+  'Step Count (count)':            ['steps',           v=>Math.round(v)],
+  'Weight (kg)':                   ['weight_kg',       v=>v],
+  'Body Fat Percentage (%)':       ['body_fat_pct',    v=>v],
+  'Sleep Analysis [Total] (hr)':   ['sleep_total_hr',  v=>v],
+  'Sleep Analysis [Deep] (hr)':    ['sleep_deep_hr',   v=>v],
+  'Sleep Analysis [REM] (hr)':     ['sleep_rem_hr',    v=>v],
+  'Heart Rate Variability (ms)':   ['hrv_ms',          v=>v],
+  'Resting Heart Rate (count/min)':['resting_hr',      v=>v],
+  'Heart Rate [Avg] (count/min)':  ['hr_avg',          v=>v],
+  'Active Energy (kJ)':            ['calories_out',    v=>v/4.184],
+  'Dietary Energy (kJ)':           ['calories_in',     v=>v/4.184],
+  'Protein (g)':                   ['protein_g',       v=>v],
+  'Carbohydrates (g)':             ['carbs_g',         v=>v],
+  'Total Fat (g)':                 ['fat_g',           v=>v],
+  'Apple Exercise Time (min)':     ['exercise_min',    v=>Math.round(v)],
+  'VO2 Max (ml/(kg·min))':         ['vo2_max',         v=>v],
+  'Waist Circumference (cm)':      ['waist_cm',        v=>v],
+};
+
+// HAE JSON metric name -> [db field, unit converter (val,unit)->val]
+const JSON_MAP = {
+  'step_count':                    ['steps',           (v,u)=>Math.round(v)],
+  'weight_body_mass':              ['weight_kg',       (v,u)=>u==='lb'?v*0.45359237:v],
+  'body_fat_percentage':           ['body_fat_pct',    (v,u)=>u==='%'?v:v*100],
+  'sleep_analysis':                null,  // handled specially below
+  'heart_rate_variability':        ['hrv_ms',          (v,u)=>v],
+  'resting_heart_rate':            ['resting_hr',      (v,u)=>v],
+  'heart_rate':                    ['hr_avg',          (v,u)=>v],
+  'active_energy':                 ['calories_out',    (v,u)=>u==='kJ'?v/4.184:v],
+  'dietary_energy':                ['calories_in',     (v,u)=>u==='kJ'?v/4.184:v],
+  'basal_energy_burned':           ['basal_energy',    (v,u)=>u==='kJ'?v/4.184:v],
+  'protein':                       ['protein_g',       (v,u)=>v],
+  'carbohydrates':                 ['carbs_g',         (v,u)=>v],
+  'total_fat':                     ['fat_g',           (v,u)=>v],
+  'apple_exercise_time':           ['exercise_min',    (v,u)=>Math.round(v)],
+  'vo2_max':                       ['vo2_max',         (v,u)=>v],
+  'waist_circumference':           ['waist_cm',        (v,u)=>u==='in'?v*2.54:v],
+};
+
+function slugifyCol(col){
+  return col.toLowerCase()
+    .replace(/\([^)]*\)/g,'')
+    .replace(/\[([^\]]*)\]/g,'_$1')
+    .replace(/[^a-z0-9]+/g,'_')
+    .replace(/^_+|_+$/g,'')
+    .replace(/_+/g,'_');
+}
+
+async function importHealth(file){
+  if(!file) return;
+  const name = file.name.toLowerCase();
+  if(name.endsWith('.json')) return importHealthJson(file);
+  return importHealthCsv(file);
+}
+
+async function importHealthCsv(file){
+  const status = document.getElementById('hae-status');
+  status.textContent = 'parsing CSV…';
+  let count=0, batch=[], bmBatch=[];
+  const flush = async ()=>{if(batch.length){await db.health_daily.bulkPut(batch);batch=[];}};
+  await new Promise((resolve,reject)=>{
+    Papa.parse(file,{
+      header:true, skipEmptyLines:true,
+      step: async (results, parser)=>{
+        const row = results.data;
+        const dt = row['Date/Time']; if(!dt) return;
+        const date = dt.slice(0,10);
+        const rec = {date};
+        for(const [col,[field,fn]] of Object.entries(CSV_MAP)){
+          const raw = row[col];
+          if(raw==null || raw==='' || raw==='NaN') continue;
+          const num = parseFloat(raw);
+          if(!isNaN(num)) rec[field] = fn(num);
+        }
+        // catch-all: store every other populated column under slugified name
+        for(const [col,raw] of Object.entries(row)){
+          if(col==='Date/Time') continue;
+          if(CSV_MAP[col]) continue;
+          if(raw==null || raw==='' || raw==='NaN') continue;
+          const num = parseFloat(raw);
+          if(isNaN(num)) continue;
+          const f = slugifyCol(col);
+          if(f) rec[f] = num;
+        }
+        if(rec.protein_g === 0 && rec.calories_in > 0) rec.protein_g = null;
+        batch.push(rec); count++;
+        if(rec.weight_kg!=null || rec.waist_cm!=null){
+          const bm = {date, source:'apple_health'};
+          if(rec.weight_kg!=null) bm.weight_kg = rec.weight_kg;
+          if(rec.waist_cm!=null) bm.waist_cm = rec.waist_cm;
+          bmBatch.push(bm);
+        }
+        if(batch.length>=200){parser.pause(); flush().then(()=>parser.resume());}
+        status.textContent = `imported ${count} rows…`;
+      },
+      complete: async ()=>{await flush(); resolve();},
+      error: reject,
+    });
+  });
+  // upsert body_metrics: clear prior apple_health rows + manual rows on import dates (Apple Health wins on collision)
+  const prior = await db.body_metrics.filter(b=>b.source==='apple_health').toArray();
+  if(prior.length) await db.body_metrics.bulkDelete(prior.map(p=>p.id));
+  const importDates = new Set(bmBatch.map(b=>b.date));
+  const manualCollisions = (await db.body_metrics.toArray()).filter(b=>b.source!=='apple_health' && importDates.has(b.date));
+  if(manualCollisions.length) await db.body_metrics.bulkDelete(manualCollisions.map(c=>c.id));
+  if(bmBatch.length) await db.body_metrics.bulkAdd(bmBatch);
+  await Settings.set('last_health_sync_at', new Date().toISOString());
+  status.innerHTML = `<span style="color:var(--recovery)">✓ Imported ${count} rows · ${bmBatch.length} weight/waist entries · ${manualCollisions.length} stale manual overwrites.</span>`;
+  pushState();
+}
+
+async function importHealthJson(file){
+  const status = document.getElementById('hae-status');
+  status.textContent = 'parsing JSON…';
+  const text = await file.text();
+  let parsed;
+  try{parsed = JSON.parse(text);}catch(e){status.innerHTML='<span style="color:var(--stress)">Invalid JSON.</span>';return;}
+  const metrics = parsed?.data?.metrics || parsed?.metrics || [];
+  const haeWorkouts = parsed?.data?.workouts || parsed?.workouts || [];
+  if(!metrics.length && !haeWorkouts.length){status.innerHTML='<span style="color:var(--stress)">No metrics or workouts found. Expected data.metrics[] or data.workouts[].</span>';return;}
+
+  // Aggregate by date
+  const byDate = {};
+  let metricCount=0;
+  for(const m of metrics){
+    const mname = m.name;
+    const units = m.units || '';
+    if(mname==='sleep_analysis'){
+      for(const e of (m.data||[])){
+        const date = (e.sleepStart || e.date || e.endDate || '').slice(0,10);
+        if(!date) continue;
+        byDate[date] = byDate[date] || {date};
+        const r = byDate[date];
+        // HAE sleep_analysis fields: inBed, asleep, sleepStart, sleepEnd, awake, core, deep, rem (all in hours)
+        if(e.asleep!=null) r.sleep_total_hr = (r.sleep_total_hr||0) + e.asleep;
+        else if(e.inBed!=null && r.sleep_total_hr==null) r.sleep_total_hr = e.inBed;
+        if(e.deep!=null) r.sleep_deep_hr = (r.sleep_deep_hr||0) + e.deep;
+        if(e.rem!=null) r.sleep_rem_hr = (r.sleep_rem_hr||0) + e.rem;
+      }
+      metricCount++;
+      continue;
+    }
+    const map = JSON_MAP[mname];
+    const field = map ? map[0] : mname;   // use canonical name if mapped, else verbatim metric name
+    const fn = map ? map[1] : ((v,u)=>v);
+    for(const e of (m.data||[])){
+      const date = (e.date || e.startDate || '').slice(0,10);
+      if(!date) continue;
+      const val = e.qty ?? e.value ?? e.Avg ?? e.avg;
+      if(val==null || isNaN(val)) continue;
+      byDate[date] = byDate[date] || {date};
+      const converted = fn(parseFloat(val), units);
+      if(byDate[date][field]==null) byDate[date][field] = converted;
+      else byDate[date][field] = (byDate[date][field]+converted)/2;
+    }
+    metricCount++;
+  }
+  // MFP quick-add
+  for(const d of Object.values(byDate)){
+    if(d.protein_g===0 && d.calories_in>0) d.protein_g = null;
+  }
+  const rows = Object.values(byDate);
+  if(rows.length) await db.health_daily.bulkPut(rows);
+  // mirror weight/waist into body_metrics with source tag
+  const bmBatch = [];
+  for(const r of rows){
+    if(r.weight_kg!=null || r.waist_cm!=null){
+      const bm = {date:r.date, source:'apple_health'};
+      if(r.weight_kg!=null) bm.weight_kg = r.weight_kg;
+      if(r.waist_cm!=null) bm.waist_cm = r.waist_cm;
+      bmBatch.push(bm);
+    }
+  }
+  const prior = await db.body_metrics.filter(b=>b.source==='apple_health').toArray();
+  if(prior.length) await db.body_metrics.bulkDelete(prior.map(p=>p.id));
+  const importDates = new Set(bmBatch.map(b=>b.date));
+  const manualCollisions = (await db.body_metrics.toArray()).filter(b=>b.source!=='apple_health' && importDates.has(b.date));
+  if(manualCollisions.length) await db.body_metrics.bulkDelete(manualCollisions.map(c=>c.id));
+  if(bmBatch.length) await db.body_metrics.bulkAdd(bmBatch);
+
+  // workouts (HAE JSON has data.workouts[] with per-workout HR samples, energy, distance, etc.)
+  let wkCount = 0;
+  if(haeWorkouts.length){
+    await db.health_workouts.clear();   // idempotent on re-import
+    const wkRows = haeWorkouts.map(w=>{
+      const r = {
+        start: (w.start || w.startDate || '').slice(0,19),
+        end:   (w.end || w.endDate || '').slice(0,19),
+        type:  w.name || w.workoutActivityType || w.activityType || 'unknown',
+        duration_min: w.duration!=null ? +w.duration : null,
+        distance_km:  w.distance?.qty ?? w.totalDistance?.qty ?? null,
+        energy_kcal:  (w.activeEnergyBurned?.qty ?? w.totalEnergyBurned?.qty ?? w.energy?.qty ?? null),
+        avg_hr:       w.avgHeartRate?.qty ?? w.heartRateAvg ?? null,
+        max_hr:       w.maxHeartRate?.qty ?? w.heartRateMax ?? null,
+        min_hr:       w.minHeartRate?.qty ?? w.heartRateMin ?? null,
+        elevation_m:  w.elevationGain?.qty ?? null,
+        hr_samples:   (w.heartRateData || w.heartRate || []).slice(0,200),   // cap to keep storage sane
+      };
+      // catch-all: stash any other top-level numeric fields under raw name
+      for(const [k,v] of Object.entries(w)){
+        if(['start','end','startDate','endDate','name','workoutActivityType','activityType','duration','distance','totalDistance','activeEnergyBurned','totalEnergyBurned','energy','avgHeartRate','maxHeartRate','minHeartRate','heartRateAvg','heartRateMax','heartRateMin','elevationGain','heartRateData','heartRate','route'].includes(k)) continue;
+        if(typeof v === 'number') r[k] = v;
+        else if(v?.qty != null && typeof v.qty === 'number') r[k] = v.qty;
+      }
+      return r;
+    });
+    await db.health_workouts.bulkAdd(wkRows);
+    wkCount = wkRows.length;
+  }
+
+  await Settings.set('last_health_sync_at', new Date().toISOString());
+  status.innerHTML = `<span style="color:var(--recovery)">✓ Imported ${rows.length} days · ${metricCount} metrics · ${bmBatch.length} weight/waist · ${wkCount} workouts.</span>`;
+  pushState();
+}
+
+/* ============== STATE.JSON PUSH ============== */
+async function buildStatePayload(){
+  const phase = await getPhase();
+  const wkStart = weekStart(today());
+  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const wkDates = [...new Set(wkWorkouts.map(w=>w.date))].sort();
+  const allWk = await db.workouts.orderBy('date').toArray();
+  const lastW = allWk[allWk.length-1];
+  const ck = (await db.checkins.orderBy('date').reverse().limit(1).toArray())[0];
+  const cutoff = fmtDate(new Date(Date.now()-28*86400000));
+  const h4 = await db.health_daily.where('date').aboveOrEqual(cutoff).toArray();
+  const wkBuckets = {};
+  const w4 = await db.workouts.where('date').aboveOrEqual(cutoff).toArray();
+  for(const w of w4){const ws = weekStart(w.date);(wkBuckets[ws]=wkBuckets[ws]||new Set()).add(w.date);}
+  const wkArr = Object.values(wkBuckets);
+  const sleepIntent = await Settings.get('sleep_intent_set_at',null);
+  const wtRows = await db.body_metrics.where('date').aboveOrEqual(cutoff).sortBy('date');
+  const wtAvg = wtRows.length ? wtRows.reduce((a,b)=>a+b.weight_kg,0)/wtRows.length : null;
+  const wtDelta4 = (wtRows.length>=2) ? (wtRows.at(-1).weight_kg - wtRows[0].weight_kg) : null;
+  return {
+    last_checkin: ck?.date || null,
+    current_week_start: wkStart,
+    this_week_sessions: wkDates.length,
+    this_week_session_dates: wkDates,
+    last_workout: lastW?.date || null,
+    phase_start_date: phase.start_date,
+    phase_target_weeks: phase.target_weeks,
+    sleep_intent_set_at: sleepIntent,
+    rolling_4wk:{
+      sleep_total_avg: avg(h4.map(d=>d.sleep_total_hr)),
+      hrv_avg: avg(h4.map(d=>d.hrv_ms)),
+      resting_hr_avg: avg(h4.map(d=>d.resting_hr)),
+      weight_avg: wtAvg,
+      weight_delta_4wk: wtDelta4,
+      protein_avg: avg(h4.map(d=>d.protein_g)),
+      calories_in_avg: avg(h4.map(d=>d.calories_in)),
+      calories_out_avg: avg(h4.map(d=>d.calories_out)),
+      steps_avg: avg(h4.map(d=>d.steps)),
+      sessions_total: w4.length,
+      sessions_weeks_at_target: wkArr.filter(s=>s.size>=4).length,
+      sessions_weeks_total: wkArr.length,
+    },
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function ghPutFile(tok, repo, path, contentB64, message){
+  const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+  const getR = await fetch(url, {headers:{Authorization:'token '+tok, Accept:'application/vnd.github+json'}});
+  let sha;
+  if(getR.ok){sha = (await getR.json()).sha;}
+  const putR = await fetch(url, {method:'PUT', headers:{Authorization:'token '+tok, 'Content-Type':'application/json'},
+    body:JSON.stringify({message, content:contentB64, sha})});
+  if(!putR.ok && putR.status===409){
+    const r2 = await fetch(url, {headers:{Authorization:'token '+tok}});
+    sha = (await r2.json()).sha;
+    return await fetch(url, {method:'PUT', headers:{Authorization:'token '+tok, 'Content-Type':'application/json'},
+      body:JSON.stringify({message:message+' (retry)', content:contentB64, sha})});
+  }
+  return putR;
+}
+
+async function blobToB64(blob){
+  return new Promise((res,rej)=>{const fr=new FileReader(); fr.onload=()=>res(fr.result.split(',')[1]); fr.onerror=rej; fr.readAsDataURL(blob);});
+}
+
+async function buildWeeklyDetail(){
+  // last 14 days of health_daily + last 4 workouts + body_metrics in range
+  const cutoff = fmtDate(new Date(Date.now()-14*86400000));
+  const days = (await db.health_daily.where('date').aboveOrEqual(cutoff).toArray()).sort((a,b)=>a.date.localeCompare(b.date));
+  const wks = (await db.workouts.orderBy('date').reverse().limit(4).toArray()).map(w=>({
+    date:w.date, splitId:w.splitId, intensity:w.intensity,
+    exercises:(w.exercises||[]).map(e=>{
+      const m = EX_BY_ID[e.exerciseId]||{};
+      return {name:m.name||e.exerciseId, muscle:m.muscle, sets:(e.sets||[]).filter(s=>s.weight&&s.reps)};
+    }),
+  }));
+  const bm = await db.body_metrics.where('date').aboveOrEqual(cutoff).sortBy('date');
+  const checkins = (await db.checkins.orderBy('date').reverse().limit(2).toArray()).map(c=>({
+    date:c.date, week_number:c.week_number, weight_kg:c.weight_kg, waist_cm:c.waist_cm||null,
+  }));
+  // HAE per-workout data (HR samples etc.) within the 14-day window
+  const haeWk = (await db.health_workouts.toArray())
+    .filter(w => w.start && w.start.slice(0,10) >= cutoff)
+    .sort((a,b)=>a.start.localeCompare(b.start));
+  return {
+    generated_at: new Date().toISOString(),
+    daily: days,
+    workouts: wks,                // Lock-In logged workouts (sets/reps/weight)
+    hae_workouts: haeWk,          // Apple Health workouts (per-session HR, energy, distance)
+    body_metrics: bm,
+    checkins,
+  };
+}
+
+async function pushCheckinBundle(currentCheckinId){
+  const tok = await Settings.get('github_token');
+  const repo = await Settings.get('github_repo');
+  if(!tok || !repo){console.warn('no repo configured, skipping bundle push');return;}
+
+  // 1. push weekly-detail.json
+  const detail = await buildWeeklyDetail();
+  const detailB64 = btoa(unescape(encodeURIComponent(JSON.stringify(detail,null,2))));
+  await ghPutFile(tok, repo, 'weekly-detail.json', detailB64, 'weekly detail update');
+
+  // 2. push photos for the latest 2 checkins (prune older from repo path is best-effort skipped)
+  const last2 = await db.checkins.orderBy('date').reverse().limit(2).toArray();
+  for(const c of last2.reverse()){  // oldest first so file ordering matches chronology
+    const wk = c.week_number || 'x';
+    for(const k of ['front','side','back']){
+      if(!c[k+'_photo']) continue;
+      const b64 = await blobToB64(c[k+'_photo']);
+      await ghPutFile(tok, repo, `photos/wk${wk}_${k}.jpg`, b64, `photo wk${wk} ${k}`);
+    }
+  }
+
+  // 3. fire repository_dispatch to trigger weekly-insight workflow immediately
+  await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
+    method:'POST',
+    headers:{Authorization:'token '+tok, Accept:'application/vnd.github+json', 'Content-Type':'application/json'},
+    body:JSON.stringify({event_type:'checkin-done'}),
+  });
+}
+
+async function autoSyncHealth(){
+  const tok = await Settings.get('github_token');
+  const repo = await Settings.get('github_repo');
+  if(!tok || !repo) return {synced:false, reason:'no repo'};
+  try{
+    // check sync metadata first to avoid re-importing same payload
+    const metaR = await fetch(`https://api.github.com/repos/${repo}/contents/hae-sync.json`,
+      {headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'}});
+    if(!metaR.ok) return {synced:false, reason:'no hae-sync.json yet'};
+    const meta = JSON.parse(await metaR.text());
+    const lastLocal = await Settings.get('last_hae_pushed_at', '');
+    if(meta.last_hae_push_at === lastLocal) return {synced:false, reason:'already current'};
+
+    // fetch the payload
+    const r = await fetch(`https://api.github.com/repos/${repo}/contents/health-latest.json`,
+      {headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'}});
+    if(!r.ok) return {synced:false, reason:'health-latest.json fetch failed'};
+    const text = await r.text();
+    const file = new Blob([text], {type:'application/json'});
+    file.name = 'health-latest.json';   // some browsers expect a name
+    // synthesize a File-like for importHealthJson which expects file.text()
+    const fakeFile = {name:'health-latest.json', text: ()=>Promise.resolve(text)};
+    // status element may not exist if not on Settings screen — temporarily inject one
+    let status = document.getElementById('hae-status');
+    let tempStatus = false;
+    if(!status){status = document.createElement('div'); status.id='hae-status'; status.style.display='none'; document.body.appendChild(status); tempStatus=true;}
+    await importHealthJson(fakeFile);
+    if(tempStatus) status.remove();
+    await Settings.set('last_hae_pushed_at', meta.last_hae_push_at);
+    return {synced:true, pushedAt:meta.last_hae_push_at};
+  }catch(e){
+    console.warn('autoSyncHealth failed', e);
+    return {synced:false, reason:e.message};
+  }
+}
+
+async function fetchLatestInsight(){
+  const tok = await Settings.get('github_token');
+  const repo = await Settings.get('github_repo');
+  if(!tok || !repo) return null;
+  try{
+    const r = await fetch(`https://api.github.com/repos/${repo}/contents/latest-insight.md`, {
+      headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'},
+    });
+    if(!r.ok) return null;
+    const text = await r.text();
+    await Settings.set('latest_insight', text);
+    return text;
+  }catch(e){return null;}
+}
+
+const pushState = debounce(async (force=false)=>{
+  const tok = await Settings.get('github_token');
+  const repo = await Settings.get('github_repo');
+  if(!tok || !repo){if(force) alert('Set GitHub token + repo first.');return;}
+  const payload = await buildStatePayload();
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload,null,2))));
+  const url = `https://api.github.com/repos/${repo}/contents/state.json`;
+  try{
+    const getR = await fetch(url,{headers:{Authorization:'token '+tok,Accept:'application/vnd.github+json'}});
+    let sha; if(getR.ok){sha=(await getR.json()).sha;}
+    const putR = await fetch(url,{method:'PUT',headers:{Authorization:'token '+tok,'Content-Type':'application/json'},body:JSON.stringify({message:'state update',content,sha})});
+    if(!putR.ok){
+      if(putR.status===409){
+        const getR2 = await fetch(url,{headers:{Authorization:'token '+tok}});
+        sha = (await getR2.json()).sha;
+        await fetch(url,{method:'PUT',headers:{Authorization:'token '+tok,'Content-Type':'application/json'},body:JSON.stringify({message:'state update (retry)',content,sha})});
+      } else {throw new Error('HTTP '+putR.status);}
+    }
+    await Settings.set('last_state_push_at', new Date().toISOString());
+  }catch(e){
+    console.warn('state push failed',e);
+    await db.sync_queue.add({action_type:'state_push',created_at:Date.now()});
+  }
+},5000);
+
+/* ============== BLOCKING WALLS ============== */
+async function checkWalls(){
+  document.querySelectorAll('.wall').forEach(w=>w.remove());
+  if(sessionStorage.getItem('wall-dismissed')) return;
+  const now = new Date();
+  const ck = (await db.checkins.orderBy('date').reverse().limit(1).toArray())[0];
+  const daysCk = ck ? daysBetween(ck.date,today()) : 999;
+  if(now.getDay()===0 && now.getHours()>=10 && daysCk>6){
+    showWall('DO THE CHECK-IN','Start check-in now',openCheckinModal); return;
+  }
+  if(now.getHours()>=9){
+    const wkWorkouts = await db.workouts.where('date').aboveOrEqual(weekStart(today())).toArray();
+    const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
+    if(uniqueDays<4){
+      showWall('Hardik, go to the gym.','You need to be the Best Version of yourself.',()=>route('log'),'Log workout now');
+    }
+  }
+}
+function showWall(title,sub,fn,btnLabel='Start now'){
+  const el = document.createElement('div');
+  el.className='wall';
+  el.innerHTML = `
+    <div class="display text-4xl mb-2">${title}</div>
+    <div class="text-white/80 mb-8 max-w-xs">${sub||''}</div>
+    <button class="bg-white text-black font-bold px-8 py-4 rounded-2xl mb-4">${btnLabel}</button>
+    <button class="text-white/60 text-sm underline">later</button>
+  `;
+  el.children[2].onclick = ()=>{el.remove();fn();};
+  el.children[3].onclick = ()=>{sessionStorage.setItem('wall-dismissed','1');el.remove();};
+  document.body.appendChild(el);
+}
+
+/* ============== BOOT ============== */
+(async ()=>{
+  if(navigator.storage?.persist){
+    const has = await navigator.storage.persisted();
+    if(!has) navigator.storage.persist().catch(()=>{});
+  }
+  const q = await db.sync_queue.toArray();
+  if(q.length){pushState(true);await db.sync_queue.clear();}
+  await getPhase();
+  render();
+  // background: pull any new HAE push, then refresh insight
+  (async()=>{
+    const r = await autoSyncHealth();
+    if(r.synced) render();
+    const t = await fetchLatestInsight();
+    if(t) render();
+  })();
+})();
+</script>
+</body>
+</html>
