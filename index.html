@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Lock-In</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -33,7 +33,9 @@
     --accent:#16D9A8;
   }
   *{-webkit-tap-highlight-color:transparent;}
-  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",sans-serif;letter-spacing:-0.01em;}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",sans-serif;letter-spacing:-0.01em;
+    overscroll-behavior:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+  input,textarea,select{-webkit-user-select:auto;user-select:auto;font-size:16px !important;}
   body{padding-bottom:env(safe-area-inset-bottom);padding-top:env(safe-area-inset-top);}
   .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
   .display{font-weight:700;letter-spacing:-0.04em;}
@@ -280,6 +282,101 @@ function sparkline(values, color='#16D9A8', w=80, h=24){
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path class="sparkline" d="${d}" stroke="${color}"/></svg>`;
 }
 
+/* ============== KPI DETAIL ============== */
+const KPI_DEFS = {
+  sleep:    {label:'Sleep',     field:'sleep_total_hr', unit:'h',     color:'var(--sleep)',    decimals:1, goodHigh:true,  desc:'Total time asleep. Sub-7h consistently = HRV drops, recovery debt builds, gym intensity suffers. 7-8h is the green zone.'},
+  hrv:      {label:'HRV',       field:'hrv_ms',         unit:'ms',    color:'var(--recovery)', decimals:0, goodHigh:true,  desc:'Heart-rate variability — your nervous system\'s recovery signal. Higher = better recovered, more parasympathetic tone. Compare to your rolling 30-day baseline, not absolute numbers.'},
+  rhr:      {label:'Resting HR', field:'resting_hr',    unit:'bpm',   color:'var(--strain)',   decimals:0, goodHigh:false, desc:'Lower = fitter / better recovered. Up 5+ bpm vs baseline often signals incoming illness, alcohol the night before, or poor sleep.'},
+  hr_avg:   {label:'HR (24h avg)',field:'hr_avg',       unit:'bpm',   color:'var(--strain)',   decimals:0, goodHigh:false, desc:'Daily average heart rate. Elevated chronically = high stress load. Useful trend-wise.'},
+  steps:    {label:'Steps',     field:'steps',          unit:'',      color:'var(--recovery)', decimals:0, goodHigh:true,  desc:'NEAT contribution to your cut. Target 5k+. Below 3k = bigger calorie deficit needed to maintain rate.'},
+  cals_in:  {label:'Calories in',field:'calories_in',   unit:'kcal',  color:'var(--strain)',   decimals:0, goodHigh:null,  desc:'From MFP → Apple Health. Cut target: 1800-2000 kcal/day.'},
+  cals_out: {label:'Calories out',field:'calories_out', unit:'kcal',  color:'var(--strain)',   decimals:0, goodHigh:true,  desc:'Active energy burned. Workouts + walking. Combined with intake = your real deficit.'},
+  protein:  {label:'Protein',   field:'protein_g',      unit:'g',     color:'var(--recovery)', decimals:0, goodHigh:true,  desc:'Target 140g+ daily on the cut. Critical for preserving muscle while in deficit.'},
+  weight:   {label:'Weight',    field:'weight_kg',      unit:'kg',    color:'var(--text)',     decimals:1, goodHigh:null,  desc:'Daily fluctuations are mostly water. Look at the 7-day average, not single days.'},
+};
+
+async function openKpiDetail(kind){
+  const def = KPI_DEFS[kind];
+  if(!def) return;
+  const isWeight = kind === 'weight';
+  const rows = isWeight
+    ? (await db.body_metrics.orderBy('date').reverse().limit(90).toArray()).reverse()
+    : (await db.health_daily.orderBy('date').reverse().limit(90).toArray()).reverse();
+  const values = rows.map(r=>({date:r.date, v:r[def.field]})).filter(p=>p.v!=null && !isNaN(p.v));
+  const recent = values.slice(-30);
+  const latest = values.at(-1);
+  const baseline = recent.length ? recent.reduce((a,b)=>a+b.v,0)/recent.length : null;
+  const last7 = values.slice(-7);
+  const last7Avg = last7.length ? last7.reduce((a,b)=>a+b.v,0)/last7.length : null;
+  const last30Min = recent.length ? Math.min(...recent.map(r=>r.v)) : null;
+  const last30Max = recent.length ? Math.max(...recent.map(r=>r.v)) : null;
+
+  // delta vs baseline color
+  let delta = null, deltaColor = 'var(--text-2)';
+  if(latest && baseline){
+    delta = latest.v - baseline;
+    if(def.goodHigh === true){
+      deltaColor = delta >= 0 ? 'var(--recovery)' : 'var(--stress)';
+    } else if(def.goodHigh === false){
+      deltaColor = delta <= 0 ? 'var(--recovery)' : 'var(--stress)';
+    }
+  }
+
+  openModal(`
+    <div class="p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-baseline">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">${def.label}</div>
+          <div class="display text-4xl mt-1 num" style="color:${def.color}">${latest ? latest.v.toFixed(def.decimals) : '—'}<span class="text-base text-[var(--text-3)] ml-1">${def.unit}</span></div>
+          ${latest ? `<div class="text-xs text-[var(--text-3)] mt-1">${latest.date}</div>` : ''}
+        </div>
+        <button class="text-[var(--text-2)] text-sm" onclick="closeModal()">Close</button>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3">
+        <div class="card" style="padding:12px;">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">7-day avg</div>
+          <div class="display text-lg num mt-1">${last7Avg!=null ? last7Avg.toFixed(def.decimals) : '—'}</div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">30-day baseline</div>
+          <div class="display text-lg num mt-1">${baseline!=null ? baseline.toFixed(def.decimals) : '—'}</div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">vs baseline</div>
+          <div class="display text-lg num mt-1" style="color:${deltaColor}">${delta!=null ? ((delta>=0?'+':'')+delta.toFixed(def.decimals)) : '—'}</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px;">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-2">Last 30 days</div>
+        <canvas id="kpi-chart" height="160"></canvas>
+        <div class="flex justify-between text-[10px] text-[var(--text-3)] mt-1 num">
+          <span>min ${last30Min!=null ? last30Min.toFixed(def.decimals) : '—'}</span>
+          <span>${recent.length} data points</span>
+          <span>max ${last30Max!=null ? last30Max.toFixed(def.decimals) : '—'}</span>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px;">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-2">What this means</div>
+        <div class="text-sm text-[var(--text-2)]">${def.desc}</div>
+      </div>
+    </div>
+  `);
+
+  if(recent.length){
+    new Chart(document.getElementById('kpi-chart'), {
+      type:'line',
+      data:{labels:recent.map(r=>r.date), datasets:[
+        {data:recent.map(r=>r.v), borderColor:def.color, backgroundColor:def.color+'22', tension:.3, fill:true, pointRadius:0, borderWidth:2},
+        ...(baseline!=null ? [{data:recent.map(_=>baseline), borderColor:'rgba(255,255,255,.2)', borderDash:[4,4], pointRadius:0, borderWidth:1, fill:false}] : [])
+      ]},
+      options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:'#5A5F6E', maxTicksLimit:4}, grid:{display:false}}, y:{ticks:{color:'#5A5F6E'}, grid:{color:'rgba(255,255,255,.04)'}}}}
+    });
+  }
+}
+
 /* ============== READINESS SCORE ============== */
 async function computeReadiness(){
   const last30 = await db.health_daily.orderBy('date').reverse().limit(30).toArray();
@@ -386,21 +483,21 @@ routes.today = async () => {
       </section>
 
       <section class="grid grid-cols-3 gap-3">
-        <div class="metric-pill">
+        <button class="metric-pill text-left" data-kpi="sleep">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Sleep</div>
           <div class="num display text-xl mt-1" style="color:var(--sleep)">${fmtNum(slp?.sleep_total_hr,1)}<span class="text-xs text-[var(--text-3)] ml-0.5">h</span></div>
           ${sparkline(slpSpark,'var(--sleep)')}
-        </div>
-        <div class="metric-pill">
+        </button>
+        <button class="metric-pill text-left" data-kpi="hrv">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">HRV</div>
           <div class="num display text-xl mt-1" style="color:var(--recovery)">${fmtNum(slp?.hrv_ms,0)}</div>
           ${sparkline(hrvSpark,'var(--recovery)')}
-        </div>
-        <div class="metric-pill">
+        </button>
+        <button class="metric-pill text-left" data-kpi="rhr">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">RHR</div>
           <div class="num display text-xl mt-1" style="color:var(--strain)">${fmtNum(slp?.resting_hr,0)}</div>
           ${sparkline(rhrSpark,'var(--strain)')}
-        </div>
+        </button>
       </section>
 
       ${insight ? `<details class="card">
@@ -419,7 +516,7 @@ routes.today = async () => {
         </div>
       </section>
 
-      <section class="card card-glow-strain">
+      <section class="card card-glow-strain" data-kpi="weight" style="cursor:pointer;">
         <div class="flex justify-between items-start">
           <div>
             <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Weight · Waist</div>
@@ -439,9 +536,9 @@ routes.today = async () => {
       <section class="card">
         <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Today's intake</div>
         <div class="grid grid-cols-3 gap-3">
-          <div><div class="text-[10px] text-[var(--text-3)] uppercase">cals</div><div class="num display text-xl mt-1" style="color:${calColor}">${fmtNum(cals,0)}</div></div>
-          <div><div class="text-[10px] text-[var(--text-3)] uppercase">protein</div><div class="num display text-xl mt-1" style="color:${protColor}">${fmtNum(prot,0)}<span class="text-xs text-[var(--text-3)]">g</span></div></div>
-          <div><div class="text-[10px] text-[var(--text-3)] uppercase">steps</div><div class="num display text-xl mt-1" style="color:${stepColor}">${fmtNum(steps,0)}</div></div>
+          <button data-kpi="cals_in" class="text-center"><div class="text-[10px] text-[var(--text-3)] uppercase">cals</div><div class="num display text-xl mt-1" style="color:${calColor}">${fmtNum(cals,0)}</div></button>
+          <button data-kpi="protein" class="text-center"><div class="text-[10px] text-[var(--text-3)] uppercase">protein</div><div class="num display text-xl mt-1" style="color:${protColor}">${fmtNum(prot,0)}<span class="text-xs text-[var(--text-3)]">g</span></div></button>
+          <button data-kpi="steps" class="text-center"><div class="text-[10px] text-[var(--text-3)] uppercase">steps</div><div class="num display text-xl mt-1" style="color:${stepColor}">${fmtNum(steps,0)}</div></button>
         </div>
       </section>
 
@@ -453,8 +550,8 @@ routes.today = async () => {
     </main>
   `;
 
-  document.getElementById('btn-logwt').onclick = openWeightModal;
-  document.getElementById('btn-logwt2').onclick = openWeightModal;
+  document.getElementById('btn-logwt').onclick = (e)=>{e.stopPropagation(); openWeightModal();};
+  document.getElementById('btn-logwt2').onclick = (e)=>{e.stopPropagation(); openWeightModal();};
   document.getElementById('btn-sleep')?.addEventListener('click', async ()=>{
     await Settings.set('sleep_intent_set_at', new Date().toISOString());
     pushState();
@@ -474,6 +571,7 @@ routes.today = async () => {
     const tp = document.getElementById('top-photos');
     if(tp) tp.onclick = ()=>openCompare(+tp.dataset.openCompare);
   }
+  document.querySelectorAll('[data-kpi]').forEach(el=>el.onclick=(e)=>{e.stopPropagation();openKpiDetail(el.dataset.kpi);});
   animateRings();
 };
 
@@ -1601,10 +1699,9 @@ function showWall(title,sub,fn,btnLabel='Start now'){
   const q = await db.sync_queue.toArray();
   if(q.length){pushState(true);await db.sync_queue.clear();}
   await getPhase();
-  // one-time seed: if DB is empty, fetch seed.json (historical Apple Health)
-  const seedDone = await Settings.get('seed_loaded', false);
+  // seed if DB is empty (no flag check — always retry on empty)
   const dayCount = await db.health_daily.count();
-  if(!seedDone && dayCount === 0){
+  if(dayCount === 0){
     try{
       const r = await fetch('seed.json');
       if(r.ok){
