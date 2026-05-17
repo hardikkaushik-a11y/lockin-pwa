@@ -1176,6 +1176,7 @@ routes.settings = async ()=>{
         <div class="space-y-2">
           <button class="btn w-full" id="export-json">Export all data (JSON)</button>
           <button class="btn w-full" id="export-photos">Export photos (ZIP)</button>
+          <button class="btn btn-primary w-full" id="reload-seed">Reload historical data (seed.json)</button>
           <button class="btn w-full" id="wipe-manual">Wipe manual weight/waist (keep Apple Health)</button>
           <button class="btn w-full" id="wipe-health">Wipe all Apple Health data (re-import next)</button>
           <button class="btn btn-danger w-full" id="reset-all">Reset everything</button>
@@ -1206,6 +1207,15 @@ routes.settings = async ()=>{
   document.getElementById('hae-file').onchange = e=>importHealth(e.target.files[0]);
   document.getElementById('export-json').onclick = exportAllJson;
   document.getElementById('export-photos').onclick = exportPhotosZip;
+  document.getElementById('reload-seed').onclick = async ()=>{
+    const btn = document.getElementById('reload-seed');
+    btn.textContent='Loading…'; btn.disabled=true;
+    try{
+      const r = await loadSeed();
+      alert(`Seed loaded: ${r.daily} days · ${r.body} weight/waist entries.`);
+      render();
+    }catch(e){alert('Seed failed: '+e.message);}
+  };
   document.getElementById('wipe-manual').onclick = async ()=>{
     const manual = (await db.body_metrics.toArray()).filter(b=>b.source!=='apple_health');
     if(!manual.length) return alert('No manual entries to wipe.');
@@ -1658,6 +1668,22 @@ const pushState = debounce(async (force=false)=>{
   }
 },5000);
 
+/* ============== SEED LOADER ============== */
+async function loadSeed(){
+  const r = await fetch('seed.json?v='+Date.now());
+  if(!r.ok) throw new Error('seed.json fetch '+r.status);
+  const seed = await r.json();
+  if(seed.daily?.length) await db.health_daily.bulkPut(seed.daily);
+  if(seed.body_metrics?.length){
+    const prior = (await db.body_metrics.toArray()).filter(b=>b.source==='apple_health');
+    if(prior.length) await db.body_metrics.bulkDelete(prior.map(p=>p.id));
+    await db.body_metrics.bulkAdd(seed.body_metrics);
+  }
+  await Settings.set('seed_loaded', true);
+  await Settings.set('last_health_sync_at', 'seeded ' + (seed.generated_at||''));
+  return {daily:seed.daily?.length||0, body:seed.body_metrics?.length||0};
+}
+
 /* ============== BLOCKING WALLS ============== */
 async function checkWalls(){
   document.querySelectorAll('.wall').forEach(w=>w.remove());
@@ -1699,25 +1725,9 @@ function showWall(title,sub,fn,btnLabel='Start now'){
   const q = await db.sync_queue.toArray();
   if(q.length){pushState(true);await db.sync_queue.clear();}
   await getPhase();
-  // seed if DB is empty (no flag check — always retry on empty)
+  // auto-seed if data is clearly incomplete (< 100 days)
   const dayCount = await db.health_daily.count();
-  if(dayCount === 0){
-    try{
-      const r = await fetch('seed.json');
-      if(r.ok){
-        const seed = await r.json();
-        if(seed.daily?.length) await db.health_daily.bulkPut(seed.daily);
-        if(seed.body_metrics?.length){
-          // clear prior apple_health rows first (idempotent)
-          const prior = (await db.body_metrics.toArray()).filter(b=>b.source==='apple_health');
-          if(prior.length) await db.body_metrics.bulkDelete(prior.map(p=>p.id));
-          await db.body_metrics.bulkAdd(seed.body_metrics);
-        }
-        await Settings.set('seed_loaded', true);
-        await Settings.set('last_health_sync_at', 'seeded ' + seed.generated_at);
-      }
-    }catch(e){console.warn('seed load failed', e);}
-  }
+  if(dayCount < 100) await loadSeed().catch(e=>console.warn('auto-seed failed', e));
   render();
   // background: pull any new HAE push, then refresh insight
   (async()=>{
