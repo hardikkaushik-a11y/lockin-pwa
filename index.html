@@ -175,7 +175,7 @@ const EXERCISES = [
 ];
 const EX_BY_ID = Object.fromEntries(EXERCISES.map(e=>[e.id,e]));
 const SPLITS = [
-  {id:'day1',name:'Chest + Back + Shoulders',exercises:['assisted-pullup','incline-db-press','lat-pulldown','pec-dec','machine-row','lateral-raise']},
+  {id:'day1',name:'Chest + Back + Shoulders',exercises:['assisted-pullup','pushup','incline-db-press','lat-pulldown','pec-dec','machine-row','lateral-raise'],supersets:[['assisted-pullup','pushup']]},
   {id:'day2',name:'Arms + Shoulders',exercises:['barbell-curl','tricep-pushdown','cable-curl','cable-katana','ohp-barbell','lateral-raise'],supersets:[['barbell-curl','tricep-pushdown']]},
   {id:'day4',name:'Chest + Biceps',exercises:['incline-smith-bench','chest-press-machine','pec-dec','hammer-curl','barbell-curl','lateral-raise']},
   {id:'day5',name:'Back + Triceps',exercises:['deadlift','lat-pulldown','cable-row','tricep-pushdown','cable-katana','lateral-raise']},
