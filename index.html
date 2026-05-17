@@ -1601,6 +1601,26 @@ function showWall(title,sub,fn,btnLabel='Start now'){
   const q = await db.sync_queue.toArray();
   if(q.length){pushState(true);await db.sync_queue.clear();}
   await getPhase();
+  // one-time seed: if DB is empty, fetch seed.json (historical Apple Health)
+  const seedDone = await Settings.get('seed_loaded', false);
+  const dayCount = await db.health_daily.count();
+  if(!seedDone && dayCount === 0){
+    try{
+      const r = await fetch('seed.json');
+      if(r.ok){
+        const seed = await r.json();
+        if(seed.daily?.length) await db.health_daily.bulkPut(seed.daily);
+        if(seed.body_metrics?.length){
+          // clear prior apple_health rows first (idempotent)
+          const prior = (await db.body_metrics.toArray()).filter(b=>b.source==='apple_health');
+          if(prior.length) await db.body_metrics.bulkDelete(prior.map(p=>p.id));
+          await db.body_metrics.bulkAdd(seed.body_metrics);
+        }
+        await Settings.set('seed_loaded', true);
+        await Settings.set('last_health_sync_at', 'seeded ' + seed.generated_at);
+      }
+    }catch(e){console.warn('seed load failed', e);}
+  }
   render();
   // background: pull any new HAE push, then refresh insight
   (async()=>{
