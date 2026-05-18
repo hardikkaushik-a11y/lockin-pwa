@@ -1794,7 +1794,8 @@ async function checkWalls(){
   if(now.getHours()>=9){
     const wkWorkouts = await db.workouts.where('date').aboveOrEqual(weekStart(today())).toArray();
     const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
-    if(uniqueDays<4){
+    const todayHasWorkout = wkWorkouts.some(w=>w.date===today() && (w.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight&&s.reps)));
+    if(uniqueDays<4 && !todayHasWorkout){
       showWall('Hardik, go to the gym.','You need to be the Best Version of yourself.',()=>route('log'),'Log workout now');
     }
   }
