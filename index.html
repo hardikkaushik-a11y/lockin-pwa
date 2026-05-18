@@ -1524,11 +1524,16 @@ async function importHealthJson(file){
         if(!date) continue;
         byDate[date] = byDate[date] || {date};
         const r = byDate[date];
-        // HAE sleep_analysis fields: inBed, asleep, sleepStart, sleepEnd, awake, core, deep, rem (all in hours)
-        if(e.asleep!=null) r.sleep_total_hr = (r.sleep_total_hr||0) + e.asleep;
-        else if(e.inBed!=null && r.sleep_total_hr==null) r.sleep_total_hr = e.inBed;
+        // HAE sleep_analysis fields: inBed, asleep, sleepStart, sleepEnd, awake, core, deep, rem (hours)
         if(e.deep!=null) r.sleep_deep_hr = (r.sleep_deep_hr||0) + e.deep;
         if(e.rem!=null) r.sleep_rem_hr = (r.sleep_rem_hr||0) + e.rem;
+        if(e.core!=null) r.sleep_core_hr = (r.sleep_core_hr||0) + e.core;
+        // asleep total: prefer e.asleep when > 0, else sum stages, else fall back to inBed
+        let total = 0;
+        if(e.asleep > 0) total = e.asleep;
+        else total = (e.deep||0) + (e.rem||0) + (e.core||0);
+        if(total === 0 && e.inBed) total = e.inBed;
+        if(total > 0) r.sleep_total_hr = (r.sleep_total_hr||0) + total;
       }
       metricCount++;
       continue;
