@@ -866,7 +866,7 @@ async function startRest(sec){
   const end = Date.now()+sec*1000;
   const topic = await Settings.get('ntfy_topic');
   if(topic){
-    try{await fetch(`https://ntfy.sh/${topic}`,{method:'POST',headers:{'Title':'Rest done','Delay':sec+'s'},body:'Rest complete — next set'});}
+    try{await fetch(`https://ntfy.sh/${topic}`,{method:'POST',headers:{'Title':`Rest done ${new Date().toTimeString().slice(0,5)}`,'Priority':'urgent','Delay':sec+'s'},body:'Rest complete — next set'});}
     catch(e){console.warn('ntfy push failed',e);}
   }
   const bar = document.createElement('div');
@@ -1296,7 +1296,14 @@ routes.settings = async ()=>{
   document.getElementById('ntfy-test').onclick = async ()=>{
     const t = await Settings.get('ntfy_topic');
     if(!t) return alert('Set topic first.');
-    try{await fetch(`https://ntfy.sh/${t}`,{method:'POST',body:'Lock-In test push'});alert('Sent.');}catch(e){alert('Failed: '+e.message);}
+    try{
+      await fetch(`https://ntfy.sh/${t}`,{
+        method:'POST',
+        headers:{'Title':`Lock-In test ${new Date().toTimeString().slice(0,5)}`,'Priority':'urgent'},
+        body:'Test from PWA at '+new Date().toLocaleTimeString(),
+      });
+      alert('Sent. Phone should buzz.');
+    }catch(e){alert('Failed: '+e.message);}
   };
   document.getElementById('persist-req').onclick = async ()=>{
     if(navigator.storage?.persist){const r = await navigator.storage.persist();alert(r?'Granted.':'Denied.');render();}
