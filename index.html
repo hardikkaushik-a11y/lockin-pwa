@@ -453,12 +453,9 @@ routes.today = async () => {
   const rhrSpark = last7Asc.map(d=>d.resting_hr);
 
   app.innerHTML = `
-    <header class="px-5 pt-5 pb-2 flex justify-between items-baseline">
-      <div>
-        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Week ${wk} · ${phase.label}</div>
-        <div class="text-[22px] display mt-0.5">${new Date().toLocaleDateString('en-US',{weekday:'long'})}</div>
-      </div>
-      <div class="text-xs text-[var(--text-3)] num">${phasePct}% phase</div>
+    <header class="px-5 pt-5 pb-2">
+      <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+      <div class="text-[22px] display mt-0.5">${new Date().toLocaleDateString('en-US',{weekday:'long'})}</div>
     </header>
 
     <main class="px-5 space-y-4">
@@ -796,17 +793,28 @@ async function openWorkoutHistory(){
         const exCount = (w.exercises||[]).length;
         const setCount = (w.exercises||[]).reduce((a,e)=>a+(e.sets||[]).filter(s=>s.weight&&s.reps).length,0);
         const topVol = (w.exercises||[]).flatMap(e=>(e.sets||[]).filter(s=>s.weight&&s.reps).map(s=>+s.weight*+s.reps)).reduce((a,b)=>a+b,0);
-        return `<button class="card w-full text-left" style="padding:14px;" data-wk="${w.id}">
-          <div class="flex justify-between items-baseline">
-            <div class="display text-base">${split?.name||w.splitId}</div>
-            <div class="text-xs text-[var(--text-2)] num">${w.date}</div>
+        return `<div class="card" style="padding:14px;">
+          <div class="flex justify-between items-start gap-2">
+            <button class="flex-1 text-left" data-wk="${w.id}">
+              <div class="flex justify-between items-baseline">
+                <div class="display text-base">${split?.name||w.splitId}</div>
+                <div class="text-xs text-[var(--text-2)] num">${w.date}</div>
+              </div>
+              <div class="text-xs text-[var(--text-3)] mt-1 num">${w.intensity||''} · ${exCount} exercises · ${setCount} sets · ${Math.round(topVol)} kg·reps</div>
+            </button>
+            <button class="text-[var(--stress)] text-sm px-2 py-1" data-del-wk="${w.id}" title="delete">✕</button>
           </div>
-          <div class="text-xs text-[var(--text-3)] mt-1 num">${w.intensity||''} · ${exCount} exercises · ${setCount} sets · ${Math.round(topVol)} kg·reps</div>
-        </button>`;
+        </div>`;
       }).join('')}
     </div>
   `);
   document.querySelectorAll('[data-wk]').forEach(b=>b.onclick=()=>openWorkoutDetail(+b.dataset.wk));
+  document.querySelectorAll('[data-del-wk]').forEach(b=>b.onclick=async ()=>{
+    if(!confirm('Delete this workout? Cannot undo.')) return;
+    await db.workouts.delete(+b.dataset.delWk);
+    pushState();
+    openWorkoutHistory();
+  });
 }
 
 async function openWorkoutDetail(id){
@@ -1161,7 +1169,7 @@ routes.week = async ()=>{
 
   app.innerHTML = `
     <header class="px-5 pt-5 pb-3">
-      <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">This week</div>
+      <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Week</div>
       <div class="display text-[22px] mt-0.5">${wkStart} →</div>
     </header>
     <main class="px-5 space-y-4">
@@ -1187,6 +1195,11 @@ routes.week = async ()=>{
         <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-2">Body weight · 90 days</div>
         <canvas id="wtChart" height="160"></canvas>
       </section>
+
+      <section>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-2 px-1">Past 8 weeks</div>
+        <div id="past-weeks" class="space-y-2"></div>
+      </section>
     </main>
   `;
 
@@ -1197,6 +1210,36 @@ routes.week = async ()=>{
       data:{labels:sorted.map(w=>w.date),datasets:[{data:sorted.map(w=>w.weight_kg),borderColor:'#16D9A8',backgroundColor:'rgba(22,217,168,.08)',tension:.35,fill:true,pointRadius:0,borderWidth:2}]},
       options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#5A5F6E',maxTicksLimit:5},grid:{display:false}},y:{ticks:{color:'#5A5F6E'},grid:{color:'rgba(255,255,255,.04)'}}}}
     });
+  }
+  // past 8 weeks rollup
+  const pw = document.getElementById('past-weeks');
+  if(pw){
+    const all = await db.workouts.orderBy('date').toArray();
+    const allWts = (await db.body_metrics.orderBy('date').toArray()).filter(b=>b.weight_kg!=null);
+    const wtByDate = new Map(allWts.map(w=>[w.date, w.weight_kg]));
+    const rows = [];
+    for(let i=1; i<=8; i++){
+      const start = new Date(); start.setDate(start.getDate() - i*7);
+      const ws = weekStart(fmtDate(start));
+      const wend = new Date(ws); wend.setDate(wend.getDate()+6);
+      const we = fmtDate(wend);
+      const wks = all.filter(w=>w.date>=ws && w.date<=we);
+      const days = new Set(wks.map(w=>w.date)).size;
+      const wtsInWeek = allWts.filter(b=>b.date>=ws && b.date<=we).map(b=>b.weight_kg);
+      const avgWt = wtsInWeek.length ? wtsInWeek.reduce((a,b)=>a+b,0)/wtsInWeek.length : null;
+      rows.push({ws, we, days, avgWt, wkCount:wks.length});
+    }
+    pw.innerHTML = rows.map(r=>{
+      const dots = Array.from({length:TARGETS.weekly_sessions},(_,i)=>`<span class="session-dot ${i<r.days?'filled':''}" style="display:inline-block;width:18px;"></span>`).join(' ');
+      return `<div class="card" style="padding:12px;">
+        <div class="flex justify-between items-baseline">
+          <div class="text-xs text-[var(--text-2)] num">${r.ws} → ${r.we.slice(5)}</div>
+          <div class="text-xs num" style="color:${r.days>=4?'var(--recovery)':r.days>=2?'var(--strain)':'var(--stress)'}">${r.days}/${TARGETS.weekly_sessions}</div>
+        </div>
+        <div class="mt-2">${dots}</div>
+        ${r.avgWt!=null ? `<div class="text-[10px] text-[var(--text-3)] mt-2 num">avg wt ${r.avgWt.toFixed(1)} kg</div>` : ''}
+      </div>`;
+    }).join('');
   }
   animateRings();
 };
@@ -1221,16 +1264,6 @@ routes.settings = async ()=>{
       <div class="display text-[22px] mt-0.5">Configuration</div>
     </header>
     <main class="px-5 space-y-4">
-      <section class="card">
-        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Phase</div>
-        <div class="space-y-2">
-          <input id="ph-start" type="date" value="${phase.start_date}">
-          <input id="ph-weeks" type="number" value="${phase.target_weeks}" placeholder="weeks">
-          <input id="ph-label" value="${phase.label}" placeholder="label (CUT / BULK)">
-          <button class="btn btn-primary w-full" id="ph-save">Save phase</button>
-        </div>
-      </section>
-
       <section class="card">
         <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Apple Health</div>
         <label class="btn btn-primary w-full block text-center cursor-pointer">Import CSV or JSON<input type="file" id="hae-file" accept=".csv,.json,application/json,text/csv" class="hidden"></label>
@@ -1259,17 +1292,6 @@ routes.settings = async ()=>{
       </section>
 
       <section class="card">
-        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">ntfy push (legacy)</div>
-        <div class="space-y-2">
-          <input id="ntfy-topic" placeholder="topic" value="${ntfy}">
-          <div class="flex gap-2">
-            <button class="btn flex-1" id="ntfy-save">Save</button>
-            <button class="btn flex-1" id="ntfy-test">Test</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
         <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Storage</div>
         <div class="text-xs text-[var(--text-2)]">${persisted?'Persistent storage granted':'Not yet granted'}</div>
         <button class="btn w-full mt-2" id="persist-req">Request persistence</button>
@@ -1280,8 +1302,6 @@ routes.settings = async ()=>{
         <div class="space-y-2">
           <button class="btn w-full" id="export-json">Export all data (JSON)</button>
           <button class="btn w-full" id="export-photos">Export photos (ZIP)</button>
-          <button class="btn btn-primary w-full" id="reload-seed">Reload historical data (seed.json)</button>
-          <button class="btn w-full" id="wipe-manual">Wipe manual weight/waist (keep Apple Health)</button>
           <button class="btn w-full" id="wipe-health">Wipe all Apple Health data (re-import next)</button>
           <button class="btn btn-danger w-full" id="reset-all">Reset everything</button>
         </div>
@@ -1289,10 +1309,6 @@ routes.settings = async ()=>{
     </main>
   `;
 
-  document.getElementById('ph-save').onclick = async ()=>{
-    await db.phase.put({id:1,start_date:document.getElementById('ph-start').value,target_weeks:+document.getElementById('ph-weeks').value,label:document.getElementById('ph-label').value});
-    pushState(); alert('Saved.');
-  };
   document.getElementById('gh-save').onclick = async ()=>{
     await Settings.set('github_token', document.getElementById('gh-tok').value);
     await Settings.set('github_repo', document.getElementById('gh-repo').value);
@@ -1330,42 +1346,12 @@ routes.settings = async ()=>{
       icon:'icon-192.png', badge:'icon-180.png', tag:'lockin-test-'+Date.now(),
     });
   };
-  document.getElementById('ntfy-save').onclick = async ()=>{await Settings.set('ntfy_topic',document.getElementById('ntfy-topic').value);alert('Saved.');};
-  document.getElementById('ntfy-test').onclick = async ()=>{
-    const t = await Settings.get('ntfy_topic');
-    if(!t) return alert('Set topic first.');
-    try{
-      await fetch(`https://ntfy.sh/${t}`,{
-        method:'POST',
-        headers:{'Title':`Lock-In test ${new Date().toTimeString().slice(0,5)}`,'Priority':'urgent'},
-        body:'Test from PWA at '+new Date().toLocaleTimeString(),
-      });
-      alert('Sent. Phone should buzz.');
-    }catch(e){alert('Failed: '+e.message);}
-  };
   document.getElementById('persist-req').onclick = async ()=>{
     if(navigator.storage?.persist){const r = await navigator.storage.persist();alert(r?'Granted.':'Denied.');render();}
   };
   document.getElementById('hae-file').onchange = e=>importHealth(e.target.files[0]);
   document.getElementById('export-json').onclick = exportAllJson;
   document.getElementById('export-photos').onclick = exportPhotosZip;
-  document.getElementById('reload-seed').onclick = async ()=>{
-    const btn = document.getElementById('reload-seed');
-    btn.textContent='Loading…'; btn.disabled=true;
-    try{
-      const r = await loadSeed();
-      alert(`Seed loaded: ${r.daily} days · ${r.body} weight/waist entries.`);
-      render();
-    }catch(e){alert('Seed failed: '+e.message);}
-  };
-  document.getElementById('wipe-manual').onclick = async ()=>{
-    const manual = (await db.body_metrics.toArray()).filter(b=>b.source!=='apple_health');
-    if(!manual.length) return alert('No manual entries to wipe.');
-    if(!confirm(`Delete ${manual.length} manual weight/waist entries? Apple Health rows kept.`)) return;
-    await db.body_metrics.bulkDelete(manual.map(m=>m.id));
-    alert('Done. Today screen will refresh.');
-    render();
-  };
   document.getElementById('wipe-health').onclick = async ()=>{
     if(!confirm('Wipe all Apple Health-imported data (health_daily + apple_health weight/waist + HAE workouts)? Manual entries and Lock-In workouts preserved.')) return;
     await db.health_daily.clear();
