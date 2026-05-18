@@ -1772,6 +1772,52 @@ const pushState = debounce(async (force=false)=>{
   }
 },5000);
 
+/* ============== WEB PUSH ============== */
+const VAPID_PUBLIC = 'BLU0vaBI6DVkIpQVB2L3RqlJSbcHiHyeXRRhAbcisq7vUM7BGU3ixf1OsrTeq9uiTntPV2EIW2wSdiN08_XzTqk';
+
+function urlB64ToUint8Array(s){
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const b64 = (s + pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function setupWebPush(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    console.warn('web push not supported in this browser'); return null;
+  }
+  const reg = await navigator.serviceWorker.register('sw.js');
+  await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub){
+    if(Notification.permission === 'default'){
+      const perm = await Notification.requestPermission();
+      if(perm !== 'granted'){console.warn('notification permission '+perm); return null;}
+    } else if(Notification.permission !== 'granted'){
+      console.warn('notifications denied'); return null;
+    }
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC),
+    });
+  }
+  // push subscription to private repo so workflow can use it
+  const tok = await Settings.get('github_token');
+  const repo = await Settings.get('github_repo');
+  const lastSubStr = await Settings.get('last_push_sub', '');
+  const subStr = JSON.stringify(sub);
+  if(tok && repo && subStr !== lastSubStr){
+    try{
+      const b64 = btoa(unescape(encodeURIComponent(subStr)));
+      await ghPutFile(tok, repo, 'push_subscription.json', b64, 'update push subscription');
+      await Settings.set('last_push_sub', subStr);
+    }catch(e){console.warn('failed to push subscription', e);}
+  }
+  return sub;
+}
+
 /* ============== SEED LOADER ============== */
 async function loadSeed(){
   const r = await fetch('seed.json?v='+Date.now());
@@ -1834,8 +1880,9 @@ function showWall(title,sub,fn,btnLabel='Start now'){
   const dayCount = await db.health_daily.count();
   if(dayCount < 100) await loadSeed().catch(e=>console.warn('auto-seed failed', e));
   render();
-  // background: pull any new HAE push, then refresh insight
+  // background: web push + HAE sync + insight refresh
   (async()=>{
+    setupWebPush().catch(e=>console.warn('web push setup failed', e));
     const r = await autoSyncHealth();
     if(r.synced) render();
     const t = await fetchLatestInsight();
