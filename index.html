@@ -17,6 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
   :root{
     --bg:#08090A;
@@ -168,6 +169,8 @@ const EXERCISES = [
   {id:'barbell-curl',name:'Barbell Curl',group:'pull',muscle:'biceps',isCompound:false},
   {id:'cable-curl',name:'Cable Curl',group:'pull',muscle:'biceps',isCompound:false},
   {id:'hammer-curl',name:'Hammer Curl',group:'pull',muscle:'biceps',isCompound:false},
+  {id:'preacher-curl-plates',name:'Preacher Curl (Plates)',group:'pull',muscle:'biceps',isCompound:false},
+  {id:'preacher-curl-machine',name:'Preacher Curl (Machine)',group:'pull',muscle:'biceps',isCompound:false},
   {id:'squat',name:'Squat',group:'legs',muscle:'quads',isCompound:true},
   {id:'hack-squat',name:'Hack Squat',group:'legs',muscle:'quads',isCompound:true},
   {id:'leg-press',name:'Leg Press',group:'legs',muscle:'quads',isCompound:true},
@@ -185,7 +188,7 @@ const SPLITS = [
   {id:'custom',name:'Custom',exercises:[]},
 ];
 const TARGETS = {calories_min:1800,calories_max:2000,protein_min:140,steps_min:3000,steps_target:5000,weekly_sessions:4};
-const REST_DEFAULTS = {compound_sec:180,accessory_sec:90};
+const REST_DEFAULTS = {compound_sec:120,accessory_sec:90};
 const INTENSITIES = ['😴','😐','😤','🔥'];
 
 /* ============== DB ============== */
@@ -622,6 +625,25 @@ async function lastSetFor(exId, excludeId=null){
   return null;
 }
 
+// returns the full sets array from the most recent session that contained this exercise (or null)
+async function lastSetsFor(exId, excludeId=null){
+  const all = await db.workouts.orderBy('date').reverse().toArray();
+  for(const w of all){
+    if(w.id===excludeId) continue;
+    const ex = (w.exercises||[]).find(e=>e.exerciseId===exId);
+    if(ex && (ex.sets||[]).some(s=>s.weight&&s.reps)){
+      return ex.sets.map(s=>({weight:s.weight||'', reps:s.reps||''}));
+    }
+  }
+  return null;
+}
+
+async function buildSetsForExercise(exId, excludeId=null){
+  const last = await lastSetsFor(exId, excludeId);
+  if(last && last.length) return last;
+  return [{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}];
+}
+
 routes.log = async () => {
   const app = document.getElementById('app');
   const todays = await db.workouts.where('date').equals(today()).toArray();
@@ -630,10 +652,11 @@ routes.log = async () => {
   }
   if(!workoutDraft.exercises.length){
     const split = SPLITS.find(s=>s.id===workoutDraft.splitId) || SPLITS[0];
-    workoutDraft.exercises = split.exercises.map(eid=>{
+    workoutDraft.exercises = await Promise.all(split.exercises.map(async eid=>{
       const ssIdx = (split.supersets||[]).findIndex(g=>g.includes(eid));
-      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]};
-    });
+      const sets = await buildSetsForExercise(eid);
+      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets};
+    }));
   }
 
   app.innerHTML = `
@@ -642,7 +665,10 @@ routes.log = async () => {
         <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)]">Workout</div>
         <div class="display text-[22px] mt-0.5">${workoutDraft.date}</div>
       </div>
-      <button class="text-[var(--recovery)] text-sm font-semibold" id="btn-finish">Finish</button>
+      <div class="flex gap-3 items-center">
+        <button class="text-[var(--text-2)] text-sm" id="btn-history">History</button>
+        <button class="text-[var(--recovery)] text-sm font-semibold" id="btn-finish">Finish</button>
+      </div>
     </header>
     <main class="px-5 space-y-4">
       <div class="scrollx flex gap-2 -mx-1 px-1 pb-1">
@@ -656,19 +682,21 @@ routes.log = async () => {
     </main>
   `;
 
-  document.querySelectorAll('[data-split]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-split]').forEach(b=>b.onclick=async ()=>{
     workoutDraft.splitId = b.dataset.split;
     const split = SPLITS.find(s=>s.id===b.dataset.split);
-    workoutDraft.exercises = split.exercises.map(eid=>{
+    workoutDraft.exercises = await Promise.all(split.exercises.map(async eid=>{
       const ssIdx = (split.supersets||[]).findIndex(g=>g.includes(eid));
-      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]};
-    });
+      const sets = await buildSetsForExercise(eid);
+      return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets};
+    }));
     saveDraft(); routes.log();
   });
   document.querySelectorAll('[data-int]').forEach(b=>b.onclick=()=>{
     workoutDraft.intensity = b.dataset.int; saveDraft(); routes.log();
   });
   document.getElementById('btn-add-ex').onclick = openAddExerciseModal;
+  document.getElementById('btn-history').onclick = openWorkoutHistory;
   document.getElementById('btn-finish').onclick = async ()=>{
     saveDraft.flush();
     await db.workouts.put(workoutDraft);
@@ -691,9 +719,9 @@ async function renderExList(){
     const ssTag = e.ssGroup!=null ? `<span style="background:var(--recovery);color:#03110D;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-right:6px;">SS${String.fromCharCode(65+e.ssGroup)}</span>` : '';
     const ssBorder = e.ssGroup!=null ? `border-left:2px solid var(--recovery);` : '';
     blocks.push(`
-      <div class="card" style="padding:16px;${ssBorder}">
+      <div class="card ex-card" style="padding:16px;${ssBorder}" data-idx="${i}">
         <div class="flex justify-between items-start mb-3">
-          <div>
+          <div class="flex-1">
             <div class="display text-base">${ssTag}${meta.name}</div>
             <div class="text-[11px] uppercase tracking-wider text-[var(--text-3)] mt-0.5">${meta.muscle}</div>
             <div class="text-xs text-[var(--text-2)] mt-1">${last?`Last: ${last.weight}kg × ${last.reps}`:'no history'}</div>
@@ -739,6 +767,74 @@ async function renderExList(){
     workoutDraft.exercises.splice(+b.dataset.rmEx,1); saveDraft(); renderExList();
   });
   wrap.querySelectorAll('[data-rest]').forEach(b=>b.onclick=()=>startRest(+b.dataset.rest));
+  // SortableJS: long-press to drag-reorder exercises
+  if(window.Sortable && !wrap._sortable){
+    wrap._sortable = Sortable.create(wrap, {
+      animation: 200,
+      delay: 350, delayOnTouchOnly: true, touchStartThreshold: 5,
+      ghostClass: 'opacity-30',
+      onEnd: ()=>{
+        const newOrder = [...wrap.querySelectorAll('.ex-card')].map(el=>+el.dataset.idx);
+        workoutDraft.exercises = newOrder.map(i=>workoutDraft.exercises[i]);
+        saveDraft(); renderExList();
+      },
+    });
+  }
+}
+
+async function openWorkoutHistory(){
+  const all = (await db.workouts.orderBy('date').reverse().toArray()).slice(0,50);
+  openModal(`
+    <div class="p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-baseline">
+        <h2 class="display text-xl">History</h2>
+        <button class="text-[var(--text-2)] text-sm" onclick="closeModal()">Close</button>
+      </div>
+      ${all.length===0 ? '<div class="text-[var(--text-3)] text-sm">No workouts yet.</div>' : ''}
+      ${all.map(w=>{
+        const split = SPLITS.find(s=>s.id===w.splitId);
+        const exCount = (w.exercises||[]).length;
+        const setCount = (w.exercises||[]).reduce((a,e)=>a+(e.sets||[]).filter(s=>s.weight&&s.reps).length,0);
+        const topVol = (w.exercises||[]).flatMap(e=>(e.sets||[]).filter(s=>s.weight&&s.reps).map(s=>+s.weight*+s.reps)).reduce((a,b)=>a+b,0);
+        return `<button class="card w-full text-left" style="padding:14px;" data-wk="${w.id}">
+          <div class="flex justify-between items-baseline">
+            <div class="display text-base">${split?.name||w.splitId}</div>
+            <div class="text-xs text-[var(--text-2)] num">${w.date}</div>
+          </div>
+          <div class="text-xs text-[var(--text-3)] mt-1 num">${w.intensity||''} · ${exCount} exercises · ${setCount} sets · ${Math.round(topVol)} kg·reps</div>
+        </button>`;
+      }).join('')}
+    </div>
+  `);
+  document.querySelectorAll('[data-wk]').forEach(b=>b.onclick=()=>openWorkoutDetail(+b.dataset.wk));
+}
+
+async function openWorkoutDetail(id){
+  const w = await db.workouts.get(id);
+  if(!w) return;
+  const split = SPLITS.find(s=>s.id===w.splitId);
+  openModal(`
+    <div class="p-5 space-y-3 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-baseline">
+        <div>
+          <div class="display text-xl">${split?.name||w.splitId}</div>
+          <div class="text-xs text-[var(--text-3)] mt-1">${w.date} · ${w.intensity||''}</div>
+        </div>
+        <button class="text-[var(--text-2)] text-sm" onclick="closeModal()">Close</button>
+      </div>
+      ${(w.exercises||[]).map(e=>{
+        const meta = EX_BY_ID[e.exerciseId]||{name:e.exerciseId};
+        const sets = (e.sets||[]).filter(s=>s.weight&&s.reps);
+        return `<div class="card" style="padding:12px;">
+          <div class="display text-sm">${meta.name}</div>
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">${meta.muscle||''}</div>
+          <div class="mt-2 grid grid-cols-3 gap-1 text-xs num">
+            ${sets.length ? sets.map((s,i)=>`<div class="text-[var(--text-2)]"><span class="text-[var(--text-3)]">${i+1}</span> ${s.weight}kg × ${s.reps}</div>`).join('') : '<div class="text-[var(--text-3)] col-span-3">no completed sets</div>'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `);
 }
 
 function openAddExerciseModal(){
@@ -756,8 +852,9 @@ function openAddExerciseModal(){
     const term = q.value.toLowerCase();
     const list = EXERCISES.filter(e=>!term||e.name.toLowerCase().includes(term)||e.muscle.includes(term)).slice(0,30);
     results.innerHTML = list.map(e=>`<button class="w-full text-left rounded-xl p-3" style="background:rgba(255,255,255,.03);border:1px solid var(--hairline);" data-ex="${e.id}"><div class="text-sm">${e.name}</div><div class="text-[11px] text-[var(--text-3)] uppercase tracking-wider">${e.muscle}</div></button>`).join('');
-    results.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{
-      workoutDraft.exercises.push({exerciseId:b.dataset.ex, sets:[{weight:'',reps:''},{weight:'',reps:''},{weight:'',reps:''}]});
+    results.querySelectorAll('[data-ex]').forEach(b=>b.onclick=async ()=>{
+      const sets = await buildSetsForExercise(b.dataset.ex);
+      workoutDraft.exercises.push({exerciseId:b.dataset.ex, sets});
       saveDraft(); closeModal(); renderExList();
     });
   };
@@ -1711,7 +1808,7 @@ function showWall(title,sub,fn,btnLabel='Start now'){
     <button class="bg-white text-black font-bold px-8 py-4 rounded-2xl mb-4">${btnLabel}</button>
     <button class="text-white/60 text-sm underline">later</button>
   `;
-  el.children[2].onclick = ()=>{el.remove();fn();};
+  el.children[2].onclick = ()=>{sessionStorage.setItem('wall-dismissed','1');el.remove();fn();};
   el.children[3].onclick = ()=>{sessionStorage.setItem('wall-dismissed','1');el.remove();};
   document.body.appendChild(el);
 }
