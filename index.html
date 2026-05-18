@@ -483,21 +483,29 @@ routes.today = async () => {
       </section>
 
       <section class="grid grid-cols-3 gap-3">
+        ${(()=>{
+          const findLatest = (field)=>{for(const d of last30){if(d[field]!=null&&!isNaN(d[field])) return {v:d[field], date:d.date, ago:daysBetween(d.date, today())};} return null;};
+          const sl = findLatest('sleep_total_hr');
+          const hv = findLatest('hrv_ms');
+          const rr = findLatest('resting_hr');
+          const ago = (x)=>x?(x.ago===0?'today':x.ago===1?'1d ago':x.ago+'d ago'):'';
+          return `
         <button class="metric-pill text-left" data-kpi="sleep">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">Sleep</div>
-          <div class="num display text-xl mt-1" style="color:var(--sleep)">${fmtNum(slp?.sleep_total_hr,1)}<span class="text-xs text-[var(--text-3)] ml-0.5">h</span></div>
-          ${sparkline(slpSpark,'var(--sleep)')}
+          <div class="num display text-xl mt-1" style="color:var(--sleep)">${sl?sl.v.toFixed(1):'—'}<span class="text-xs text-[var(--text-3)] ml-0.5">h</span></div>
+          <div class="text-[9px] text-[var(--text-3)] mt-0.5">${ago(sl)}</div>
         </button>
         <button class="metric-pill text-left" data-kpi="hrv">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">HRV</div>
-          <div class="num display text-xl mt-1" style="color:var(--recovery)">${fmtNum(slp?.hrv_ms,0)}</div>
-          ${sparkline(hrvSpark,'var(--recovery)')}
+          <div class="num display text-xl mt-1" style="color:var(--recovery)">${hv?Math.round(hv.v):'—'}</div>
+          <div class="text-[9px] text-[var(--text-3)] mt-0.5">${ago(hv)}</div>
         </button>
         <button class="metric-pill text-left" data-kpi="rhr">
           <div class="text-[10px] uppercase tracking-wider text-[var(--text-3)]">RHR</div>
-          <div class="num display text-xl mt-1" style="color:var(--strain)">${fmtNum(slp?.resting_hr,0)}</div>
-          ${sparkline(rhrSpark,'var(--strain)')}
-        </button>
+          <div class="num display text-xl mt-1" style="color:var(--strain)">${rr?Math.round(rr.v):'—'}</div>
+          <div class="text-[9px] text-[var(--text-3)] mt-0.5">${ago(rr)}</div>
+        </button>`;
+        })()}
       </section>
 
       ${insight ? `<details class="card">
