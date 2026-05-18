@@ -1848,14 +1848,12 @@ async function setupWebPush(){
   const tok = await Settings.get('github_token');
   const repo = await Settings.get('github_repo');
   if(!tok || !repo) throw new Error('GitHub PAT + repo must be set in Settings first');
-  const lastSubStr = await Settings.get('last_push_sub', '');
+  // always upload (idempotent) — skip-if-same caused stale-repo bugs
   const subStr = JSON.stringify(sub);
-  if(subStr !== lastSubStr){
-    const b64 = btoa(unescape(encodeURIComponent(subStr)));
-    const r = await ghPutFile(tok, repo, 'push_subscription.json', b64, 'update push subscription');
-    if(!r.ok) throw new Error('Repo upload failed: HTTP '+r.status+' '+await r.text());
-    await Settings.set('last_push_sub', subStr);
-  }
+  const b64 = btoa(unescape(encodeURIComponent(subStr)));
+  const r = await ghPutFile(tok, repo, 'push_subscription.json', b64, 'update push subscription');
+  if(!r.ok) throw new Error('Repo upload failed: HTTP '+r.status+' '+(await r.text()).slice(0,200));
+  await Settings.set('last_push_sub', subStr);
   return sub;
 }
 
