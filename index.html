@@ -1823,8 +1823,11 @@ function urlB64ToUint8Array(s){
 }
 
 async function setupWebPush(){
+  if(typeof Notification === 'undefined'){
+    throw new Error('Notification API not available — open Lock-In from the home-screen icon (not Safari tab), and ensure iOS is 16.4+');
+  }
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
-    console.warn('web push not supported in this browser'); return null;
+    throw new Error('Service Worker / Push API not supported in this browser');
   }
   const reg = await navigator.serviceWorker.register('sw.js');
   await navigator.serviceWorker.ready;
@@ -1832,9 +1835,9 @@ async function setupWebPush(){
   if(!sub){
     if(Notification.permission === 'default'){
       const perm = await Notification.requestPermission();
-      if(perm !== 'granted'){console.warn('notification permission '+perm); return null;}
+      if(perm !== 'granted') throw new Error('Permission '+perm);
     } else if(Notification.permission !== 'granted'){
-      console.warn('notifications denied'); return null;
+      throw new Error('Permission previously denied — fix in iPhone Settings → Notifications → Lock-In');
     }
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
