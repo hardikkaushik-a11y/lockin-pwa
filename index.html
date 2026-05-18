@@ -1280,10 +1280,11 @@ routes.settings = async ()=>{
       </section>
 
       <section class="card">
-        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">GitHub state sync</div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">GitHub sync</div>
         <div class="space-y-2">
           <input id="gh-tok" type="password" placeholder="PAT" value="${ghTok}">
-          <input id="gh-repo" placeholder="username/repo" value="${ghRepo}">
+          <input id="gh-repo" placeholder="public state repo — username/repo" value="${ghRepo}">
+          <input id="gh-priv-repo" placeholder="private photos repo — username/repo" value="${await Settings.get('github_private_repo','')}">
           <div class="flex gap-2">
             <button class="btn flex-1" id="gh-save">Save</button>
             <button class="btn flex-1" id="gh-push">Force push</button>
@@ -1320,6 +1321,7 @@ routes.settings = async ()=>{
   document.getElementById('gh-save').onclick = async ()=>{
     await Settings.set('github_token', document.getElementById('gh-tok').value);
     await Settings.set('github_repo', document.getElementById('gh-repo').value);
+    await Settings.set('github_private_repo', document.getElementById('gh-priv-repo').value);
     alert('Saved.');
   };
   document.getElementById('gh-push').onclick = async ()=>{await pushState(true); render();};
@@ -1701,8 +1703,8 @@ async function buildWeeklyDetail(){
 
 async function pushCheckinBundle(currentCheckinId){
   const tok = await Settings.get('github_token');
-  const repo = await Settings.get('github_repo');
-  if(!tok || !repo){console.warn('no repo configured, skipping bundle push');return;}
+  const repo = await Settings.get('github_private_repo') || await Settings.get('github_repo');
+  if(!tok || !repo){console.warn('no private repo configured, skipping bundle push');return;}
 
   // 1. push weekly-detail.json
   const detail = await buildWeeklyDetail();
@@ -1766,7 +1768,7 @@ async function autoSyncHealth(){
 
 async function fetchLatestInsight(){
   const tok = await Settings.get('github_token');
-  const repo = await Settings.get('github_repo');
+  const repo = await Settings.get('github_private_repo') || await Settings.get('github_repo');
   if(!tok || !repo) return null;
   try{
     const r = await fetch(`https://api.github.com/repos/${repo}/contents/latest-insight.md`, {
