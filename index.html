@@ -1847,14 +1847,14 @@ async function setupWebPush(){
   // push subscription to private repo so workflow can use it
   const tok = await Settings.get('github_token');
   const repo = await Settings.get('github_repo');
+  if(!tok || !repo) throw new Error('GitHub PAT + repo must be set in Settings first');
   const lastSubStr = await Settings.get('last_push_sub', '');
   const subStr = JSON.stringify(sub);
-  if(tok && repo && subStr !== lastSubStr){
-    try{
-      const b64 = btoa(unescape(encodeURIComponent(subStr)));
-      await ghPutFile(tok, repo, 'push_subscription.json', b64, 'update push subscription');
-      await Settings.set('last_push_sub', subStr);
-    }catch(e){console.warn('failed to push subscription', e);}
+  if(subStr !== lastSubStr){
+    const b64 = btoa(unescape(encodeURIComponent(subStr)));
+    const r = await ghPutFile(tok, repo, 'push_subscription.json', b64, 'update push subscription');
+    if(!r.ok) throw new Error('Repo upload failed: HTTP '+r.status+' '+await r.text());
+    await Settings.set('last_push_sub', subStr);
   }
   return sub;
 }
