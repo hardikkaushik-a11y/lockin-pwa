@@ -419,7 +419,8 @@ routes.today = async () => {
   const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
   const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
 
-  const last7 = await db.health_daily.orderBy('date').reverse().limit(7).toArray();
+  const last30 = await db.health_daily.orderBy('date').reverse().limit(30).toArray();
+  const last7 = last30.slice(0,7);
   const last7Asc = last7.slice().reverse();
   const r = await computeReadiness();
   const slp = r.last;
