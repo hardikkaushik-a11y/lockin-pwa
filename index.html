@@ -528,8 +528,7 @@ routes.today = async () => {
           <button class="text-[var(--text-2)] text-sm" id="btn-logwt">+ log</button>
         </div>
         <div class="text-xs text-[var(--text-2)] mt-2 num flex gap-3">
-          ${wt7!=null?`<span>${wt7>=0?'▲':'▼'} ${Math.abs(wt7).toFixed(1)} 7d</span>`:''}
-          ${wtPhase!=null?`<span>${wtPhase>=0?'▲':'▼'} ${Math.abs(wtPhase).toFixed(1)} phase</span>`:''}
+          ${wt7!=null?`<span>${wt7>=0?'▲':'▼'} ${Math.abs(wt7).toFixed(1)} kg / 7d</span>`:''}
         </div>
       </section>
 
