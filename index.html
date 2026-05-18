@@ -688,6 +688,9 @@ routes.log = async () => {
   `;
 
   document.querySelectorAll('[data-split]').forEach(b=>b.onclick=async ()=>{
+    if(b.dataset.split === workoutDraft.splitId) return;  // no-op tap on same chip
+    const hasData = (workoutDraft.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight||s.reps));
+    if(hasData && !confirm('Switch split? This replaces current exercises and any entered sets.')) return;
     workoutDraft.splitId = b.dataset.split;
     const split = SPLITS.find(s=>s.id===b.dataset.split);
     workoutDraft.exercises = await Promise.all(split.exercises.map(async eid=>{
