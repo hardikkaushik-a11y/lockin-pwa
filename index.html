@@ -1252,7 +1252,14 @@ routes.settings = async ()=>{
       </section>
 
       <section class="card">
-        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">ntfy push</div>
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">Web Push (native banners)</div>
+        <div class="text-xs text-[var(--text-2)] mb-2">Status: <span id="wp-status" class="num">checking…</span></div>
+        <button class="btn btn-primary w-full" id="wp-enable">Enable notifications</button>
+        <button class="btn w-full mt-2" id="wp-test">Test web push from PWA</button>
+      </section>
+
+      <section class="card">
+        <div class="text-[11px] uppercase tracking-widest text-[var(--text-3)] mb-3">ntfy push (legacy)</div>
         <div class="space-y-2">
           <input id="ntfy-topic" placeholder="topic" value="${ntfy}">
           <div class="flex gap-2">
@@ -1292,6 +1299,37 @@ routes.settings = async ()=>{
     alert('Saved.');
   };
   document.getElementById('gh-push').onclick = async ()=>{await pushState(true); render();};
+  // web push status + handlers
+  (async ()=>{
+    const status = document.getElementById('wp-status');
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)){status.textContent='not supported in this browser'; return;}
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'unknown';
+    status.textContent = `permission: ${perm} · subscribed: ${sub ? 'yes' : 'no'} · SW: ${reg ? 'registered' : 'not registered'}`;
+  })();
+  document.getElementById('wp-enable').onclick = async ()=>{
+    const btn = document.getElementById('wp-enable');
+    btn.textContent='Working…'; btn.disabled=true;
+    try{
+      const sub = await setupWebPush();
+      if(sub){alert('Enabled. Subscription pushed to repo.');}
+      else if(Notification.permission==='denied'){alert('iOS denied. Fix: iPhone Settings → Notifications → Lock-In → Allow Notifications ON, then try again.');}
+      else{alert('Setup returned no subscription. Check console.');}
+    }catch(e){alert('Failed: '+e.message);}
+    btn.textContent='Enable notifications'; btn.disabled=false;
+    render();
+  };
+  document.getElementById('wp-test').onclick = async ()=>{
+    if(!('serviceWorker' in navigator)) return alert('SW not supported');
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(!reg) return alert('Service worker not registered yet — tap Enable first.');
+    if(Notification.permission!=='granted') return alert('Permission not granted yet — tap Enable first.');
+    await reg.showNotification('Lock-In test '+new Date().toTimeString().slice(0,5),{
+      body:'If you see this with the padlock icon, web push is working.',
+      icon:'icon-192.png', badge:'icon-180.png', tag:'lockin-test-'+Date.now(),
+    });
+  };
   document.getElementById('ntfy-save').onclick = async ()=>{await Settings.set('ntfy_topic',document.getElementById('ntfy-topic').value);alert('Saved.');};
   document.getElementById('ntfy-test').onclick = async ()=>{
     const t = await Settings.get('ntfy_topic');
