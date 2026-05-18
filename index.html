@@ -1539,8 +1539,11 @@ async function importHealthJson(file){
       continue;
     }
     const map = JSON_MAP[mname];
-    const field = map ? map[0] : mname;   // use canonical name if mapped, else verbatim metric name
+    const field = map ? map[0] : mname;   // canonical or verbatim
     const fn = map ? map[1] : ((v,u)=>v);
+    // cumulative metrics: SUM samples within a day. instantaneous (HR, HRV, weight): AVERAGE / latest
+    const CUMULATIVE = new Set(['step_count','active_energy','dietary_energy','basal_energy_burned','protein','carbohydrates','total_fat','fiber','sugar','apple_exercise_time','apple_move_time','apple_stand_time','walking_running_distance','flights_climbed','cycling_distance','swimming_distance','mindful_minutes','time_in_daylight','water','caffeine']);
+    const isCumulative = CUMULATIVE.has(mname);
     for(const e of (m.data||[])){
       const date = (e.date || e.startDate || '').slice(0,10);
       if(!date) continue;
@@ -1549,6 +1552,7 @@ async function importHealthJson(file){
       byDate[date] = byDate[date] || {date};
       const converted = fn(parseFloat(val), units);
       if(byDate[date][field]==null) byDate[date][field] = converted;
+      else if(isCumulative) byDate[date][field] += converted;
       else byDate[date][field] = (byDate[date][field]+converted)/2;
     }
     metricCount++;
