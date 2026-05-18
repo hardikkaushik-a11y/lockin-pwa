@@ -1734,36 +1734,29 @@ async function autoSyncHealth(){
   const tok = await Settings.get('github_token');
   const repo = await Settings.get('github_repo');
   if(!tok || !repo) return {synced:false, reason:'no repo'};
-  try{
-    // check sync metadata first to avoid re-importing same payload
-    const metaR = await fetch(`https://api.github.com/repos/${repo}/contents/hae-sync.json`,
-      {headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'}});
-    if(!metaR.ok) return {synced:false, reason:'no hae-sync.json yet'};
-    const meta = JSON.parse(await metaR.text());
-    const lastLocal = await Settings.get('last_hae_pushed_at', '');
-    if(meta.last_hae_push_at === lastLocal) return {synced:false, reason:'already current'};
-
-    // fetch the payload
-    const r = await fetch(`https://api.github.com/repos/${repo}/contents/health-latest.json`,
-      {headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'}});
-    if(!r.ok) return {synced:false, reason:'health-latest.json fetch failed'};
-    const text = await r.text();
-    const file = new Blob([text], {type:'application/json'});
-    file.name = 'health-latest.json';   // some browsers expect a name
-    // synthesize a File-like for importHealthJson which expects file.text()
-    const fakeFile = {name:'health-latest.json', text: ()=>Promise.resolve(text)};
-    // status element may not exist if not on Settings screen — temporarily inject one
-    let status = document.getElementById('hae-status');
-    let tempStatus = false;
-    if(!status){status = document.createElement('div'); status.id='hae-status'; status.style.display='none'; document.body.appendChild(status); tempStatus=true;}
-    await importHealthJson(fakeFile);
-    if(tempStatus) status.remove();
-    await Settings.set('last_hae_pushed_at', meta.last_hae_push_at);
-    return {synced:true, pushedAt:meta.last_hae_push_at};
-  }catch(e){
-    console.warn('autoSyncHealth failed', e);
-    return {synced:false, reason:e.message};
+  let count = 0;
+  // fetch + import both metrics + workouts files (Worker writes them separately)
+  let status = document.getElementById('hae-status');
+  let tempStatus = false;
+  if(!status){status = document.createElement('div'); status.id='hae-status'; status.style.display='none'; document.body.appendChild(status); tempStatus=true;}
+  for(const path of ['health-metrics.json', 'health-workouts.json', 'health-latest.json']){
+    try{
+      const r = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=main`,
+        {headers:{Authorization:'token '+tok, Accept:'application/vnd.github.raw'}});
+      if(!r.ok) continue;
+      const text = await r.text();
+      // skip if same as last import (sha-based hash)
+      const tag = text.length + ':' + text.slice(0,32);
+      const lastTag = await Settings.get('last_sync_tag_'+path, '');
+      if(tag === lastTag) continue;
+      const fakeFile = {name:path, text: ()=>Promise.resolve(text)};
+      await importHealthJson(fakeFile);
+      await Settings.set('last_sync_tag_'+path, tag);
+      count++;
+    }catch(e){console.warn('autoSync',path,'failed',e);}
   }
+  if(tempStatus) status.remove();
+  return {synced: count>0, files: count};
 }
 
 async function fetchLatestInsight(){
