@@ -133,12 +133,12 @@
 
   .hairline{border-top:1px solid var(--hairline);}
   /* drag-to-reorder visual states */
-  .sortable-ghost{opacity:.35;}
+  /* drag: shrink to thin pill while moving */
+  .sortable-ghost{opacity:.25;max-height:48px;overflow:hidden;}
+  .sortable-ghost .ex-row,.sortable-ghost button[data-add-set],.sortable-ghost .text-xs,.sortable-ghost .text-\[10px\],.sortable-ghost .text-\[11px\]{display:none !important;}
   .sortable-chosen{transform:scale(.98);}
-  .sortable-drag{max-height:64px;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.6);transform:rotate(-1deg);}
-  .sortable-drag .ex-row,.sortable-drag button[data-add-set],.sortable-drag .text-xs{display:none !important;}
-  .drag-handle{cursor:grab;padding:4px 8px;color:var(--text-3);font-size:18px;line-height:1;touch-action:none;}
-  .drag-handle:active{cursor:grabbing;}
+  .sortable-drag{max-height:56px !important;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.6);transform:rotate(-1deg);background:var(--surface-2) !important;}
+  .sortable-drag .ex-row,.sortable-drag button[data-add-set],.sortable-drag .text-xs,.sortable-drag .text-\[10px\],.sortable-drag .text-\[11px\]{display:none !important;}
 </style>
 </head>
 <body class="min-h-screen">
@@ -189,7 +189,7 @@ const EXERCISES = [
 const EX_BY_ID = Object.fromEntries(EXERCISES.map(e=>[e.id,e]));
 const SPLITS = [
   {id:'day1',name:'Chest + Back + Shoulders',exercises:['assisted-pullup','pushup','incline-db-press','lat-pulldown','pec-dec','machine-row','lateral-raise'],supersets:[['assisted-pullup','pushup']]},
-  {id:'day2',name:'Arms + Shoulders',exercises:['barbell-curl','tricep-pushdown','cable-curl','cable-katana','ohp-barbell','lateral-raise'],supersets:[['barbell-curl','tricep-pushdown']]},
+  {id:'day2',name:'Arms + Shoulders',exercises:['ohp-barbell','cable-katana','cable-curl','lateral-raise','barbell-curl','tricep-pushdown'],supersets:[['barbell-curl','tricep-pushdown']]},
   {id:'day4',name:'Chest + Biceps',exercises:['incline-smith-bench','chest-press-machine','pec-dec','hammer-curl','barbell-curl','lateral-raise']},
   {id:'day5',name:'Back + Triceps',exercises:['deadlift','lat-pulldown','cable-row','tricep-pushdown','cable-katana','lateral-raise']},
   {id:'day6',name:'Legs + Shoulders',exercises:['squat','leg-press','leg-curl','leg-extension','ohp-dumbbell','lateral-raise','calf-raise']},
@@ -774,14 +774,11 @@ async function renderExList(){
     blocks.push(`
       <div class="card ex-card" style="padding:16px;${ssBorder}" data-idx="${i}">
         <div class="flex justify-between items-start mb-3">
-          <div class="flex items-start gap-1 flex-1">
-            <span class="drag-handle" title="drag to reorder">⋮⋮</span>
           <div class="flex-1">
             <div class="display text-base">${ssTag}${meta.name}</div>
             <div class="text-[11px] uppercase tracking-wider text-[var(--text-3)] mt-0.5">${meta.muscle}</div>
             <div class="text-xs text-[var(--text-2)] mt-1">${last?`Last: ${last.weight}kg × ${last.reps}`:'no history'}</div>
             <div class="text-xs mt-0.5" style="color:var(--recovery)">${nudge}</div>
-          </div>
           </div>
           <button class="text-[var(--text-3)]" data-rm-ex="${i}">✕</button>
         </div>
@@ -827,9 +824,8 @@ async function renderExList(){
   if(window.Sortable){
     if(wrap._sortable) wrap._sortable.destroy();
     wrap._sortable = Sortable.create(wrap, {
-      animation: 180,
-      handle: '.drag-handle',
-      delay: 80, delayOnTouchOnly: true,
+      animation: 200,
+      delay: 300, delayOnTouchOnly: true, touchStartThreshold: 6,
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
