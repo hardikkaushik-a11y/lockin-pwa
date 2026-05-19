@@ -17,6 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
   :root{
@@ -131,6 +132,13 @@
   .progress-bar>span{display:block;height:100%;background:var(--recovery);border-radius:2px;transition:width .6s;}
 
   .hairline{border-top:1px solid var(--hairline);}
+  /* drag-to-reorder visual states */
+  .sortable-ghost{opacity:.35;}
+  .sortable-chosen{transform:scale(.98);}
+  .sortable-drag{max-height:64px;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.6);transform:rotate(-1deg);}
+  .sortable-drag .ex-row,.sortable-drag button[data-add-set],.sortable-drag .text-xs{display:none !important;}
+  .drag-handle{cursor:grab;padding:4px 8px;color:var(--text-3);font-size:18px;line-height:1;touch-action:none;}
+  .drag-handle:active{cursor:grabbing;}
 </style>
 </head>
 <body class="min-h-screen">
@@ -416,7 +424,7 @@ routes.today = async () => {
   const phasePct = Math.min(100, Math.round(wk/phase.target_weeks*100));
 
   const wkStart = weekStart(today());
-  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const wkWorkouts = (await db.workouts.where('date').aboveOrEqual(wkStart).toArray()).filter(w=>(w.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight&&s.reps)));
   const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
 
   const last30 = await db.health_daily.orderBy('date').reverse().limit(30).toArray();
@@ -766,11 +774,14 @@ async function renderExList(){
     blocks.push(`
       <div class="card ex-card" style="padding:16px;${ssBorder}" data-idx="${i}">
         <div class="flex justify-between items-start mb-3">
+          <div class="flex items-start gap-1 flex-1">
+            <span class="drag-handle" title="drag to reorder">⋮⋮</span>
           <div class="flex-1">
             <div class="display text-base">${ssTag}${meta.name}</div>
             <div class="text-[11px] uppercase tracking-wider text-[var(--text-3)] mt-0.5">${meta.muscle}</div>
             <div class="text-xs text-[var(--text-2)] mt-1">${last?`Last: ${last.weight}kg × ${last.reps}`:'no history'}</div>
             <div class="text-xs mt-0.5" style="color:var(--recovery)">${nudge}</div>
+          </div>
           </div>
           <button class="text-[var(--text-3)]" data-rm-ex="${i}">✕</button>
         </div>
@@ -812,12 +823,16 @@ async function renderExList(){
     workoutDraft.exercises.splice(+b.dataset.rmEx,1); saveDraft(); renderExList();
   });
   wrap.querySelectorAll('[data-rest]').forEach(b=>b.onclick=()=>startRest(+b.dataset.rest));
-  // SortableJS: long-press to drag-reorder exercises
-  if(window.Sortable && !wrap._sortable){
+  // SortableJS: drag handle for explicit reorder (no accidental drags on input)
+  if(window.Sortable){
+    if(wrap._sortable) wrap._sortable.destroy();
     wrap._sortable = Sortable.create(wrap, {
-      animation: 200,
-      delay: 350, delayOnTouchOnly: true, touchStartThreshold: 5,
-      ghostClass: 'opacity-30',
+      animation: 180,
+      handle: '.drag-handle',
+      delay: 80, delayOnTouchOnly: true,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
       onEnd: ()=>{
         const newOrder = [...wrap.querySelectorAll('.ex-card')].map(el=>+el.dataset.idx);
         workoutDraft.exercises = newOrder.map(i=>workoutDraft.exercises[i]);
@@ -1204,7 +1219,7 @@ async function exportPhotosZip(){
 routes.week = async ()=>{
   const app = document.getElementById('app');
   const wkStart = weekStart(today());
-  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const wkWorkouts = (await db.workouts.where('date').aboveOrEqual(wkStart).toArray()).filter(w=>(w.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight&&s.reps)));
   const uniqueDays = new Set(wkWorkouts.map(w=>w.date)).size;
   const sessionPct = (uniqueDays / TARGETS.weekly_sessions) * 100;
   const wts = await db.body_metrics.orderBy('date').reverse().limit(90).toArray();
@@ -1692,7 +1707,7 @@ async function importHealthJson(file){
 async function buildStatePayload(){
   const phase = await getPhase();
   const wkStart = weekStart(today());
-  const wkWorkouts = await db.workouts.where('date').aboveOrEqual(wkStart).toArray();
+  const wkWorkouts = (await db.workouts.where('date').aboveOrEqual(wkStart).toArray()).filter(w=>(w.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight&&s.reps)));
   const wkDates = [...new Set(wkWorkouts.map(w=>w.date))].sort();
   const allWk = await db.workouts.orderBy('date').toArray();
   const lastW = allWk[allWk.length-1];
