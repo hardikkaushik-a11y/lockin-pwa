@@ -133,12 +133,16 @@
 
   .hairline{border-top:1px solid var(--hairline);}
   /* drag-to-reorder visual states */
-  /* drag: shrink to thin pill while moving */
-  .sortable-ghost{opacity:.25;max-height:48px;overflow:hidden;}
-  .sortable-ghost .ex-row,.sortable-ghost button[data-add-set],.sortable-ghost .text-xs,.sortable-ghost .text-\[10px\],.sortable-ghost .text-\[11px\]{display:none !important;}
-  .sortable-chosen{transform:scale(.98);}
-  .sortable-drag{max-height:56px !important;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.6);transform:rotate(-1deg);background:var(--surface-2) !important;}
-  .sortable-drag .ex-row,.sortable-drag button[data-add-set],.sortable-drag .text-xs,.sortable-drag .text-\[10px\],.sortable-drag .text-\[11px\]{display:none !important;}
+  /* during drag: collapse ALL exercise cards to thin pills */
+  #ex-list.dragging .ex-card{max-height:54px;overflow:hidden;transition:max-height .15s ease;}
+  #ex-list.dragging .ex-card .ex-row,
+  #ex-list.dragging .ex-card button[data-add-set],
+  #ex-list.dragging .ex-card .text-xs,
+  #ex-list.dragging .ex-card .text-\[10px\],
+  #ex-list.dragging .ex-card .text-\[11px\]{display:none !important;}
+  .sortable-ghost{opacity:.3;}
+  .sortable-chosen{transform:scale(.97);}
+  .sortable-drag{box-shadow:0 12px 28px rgba(0,0,0,.6);transform:rotate(-1deg);background:var(--surface-2) !important;}
 </style>
 </head>
 <body class="min-h-screen">
@@ -829,7 +833,9 @@ async function renderExList(){
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
+      onStart: ()=>{ wrap.classList.add('dragging'); },
       onEnd: ()=>{
+        wrap.classList.remove('dragging');
         const newOrder = [...wrap.querySelectorAll('.ex-card')].map(el=>+el.dataset.idx);
         workoutDraft.exercises = newOrder.map(i=>workoutDraft.exercises[i]);
         saveDraft(); renderExList();
