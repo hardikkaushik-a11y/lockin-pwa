@@ -189,7 +189,38 @@ const EXERCISES = [
   {id:'leg-extension',name:'Leg Extension',group:'legs',muscle:'quads',isCompound:false},
   {id:'leg-curl',name:'Leg Curl',group:'legs',muscle:'hamstrings',isCompound:false},
   {id:'calf-raise',name:'Calf Raises',group:'legs',muscle:'calves',isCompound:false},
+  {id:'lat-pullover-cable',name:'Cable Lat Pullover',group:'pull',muscle:'back',isCompound:false},
 ];
+const EXERCISE_CUES = {
+  'incline-db-press':       'Retract and depress scapula before unracking. Drive elbows slightly in, not flared. Feel the stretch at the bottom — upper chest should load. Squeeze at the top but don\'t lockout elbows.',
+  'incline-smith-bench':    'Set the bench to 30°. Grip slightly narrower than flat bench. Control the bar path straight down to upper chest. Feel the chest stretching — not shoulders. Press through the chest, not your arms.',
+  'chest-press-machine':    'Sit tall, chest up, back pressed into the pad. Elbows slightly below shoulder height. Push through the pecs — imagine pushing the handles toward each other. Hold the squeeze for 1s at full extension.',
+  'pec-dec':                'Keep a slight bend in the elbows throughout. Start wide, feel the chest fully stretched. Lead with your elbows, not your hands. Squeeze hard when the pads meet — pause there.',
+  'cable-fly':              'Arms slightly bent, locked at that angle. Move from the shoulder, not the elbow. Think "hugging a barrel." Feel the stretch across the chest at the start, then squeeze to close. Don\'t let cables go past shoulder level.',
+  'pushup':                 'Hands just outside shoulder-width. Elbows at ~45° to torso. Lower chest to floor — full range. Squeeze chest hard at the top. If easy, slow the descent to 3s.',
+  'ohp-barbell':            'Bar rests on upper chest, elbows slightly forward of the bar. Brace core hard. Press straight up — bar path should pass the nose. At the top, shrug up to engage traps. Control the descent.',
+  'ohp-dumbbell':           'Start at ear height, palms facing forward. Press up and slightly in — dumbbells nearly touch at the top. Don\'t arch lower back. Full extension at top, controlled descent.',
+  'lateral-raise':          'Slight forward lean and slight bend in elbows. Lead with elbows, not hands. Raise to just above parallel — not higher. Think "pouring a jug" at the top. Slow and controlled on the way down.',
+  'tricep-pushdown':        'Elbows pinned to your sides — they must not move. Start at 90° or higher for full stretch. Push down until full extension. Squeeze triceps hard at the bottom. Control the return — feel the stretch at top.',
+  'cable-katana':           'One arm, cable set low. Start with arm extended down and across. Sweep upward like drawing a sword — elbow stays soft. Feel the tricep lateral head. Control the return fully.',
+  'deadlift':               'Hip hinge, not squat. Push the floor away, don\'t pull the bar up. Bar stays in contact with legs throughout. Brace core before you move. Squeeze glutes at lockout. Hinge back down — don\'t just bend over.',
+  'lat-pulldown':           'Elbows into your back pockets — that\'s the cue. Lean back ~15°. Pull bar to upper chest, not chin. Feel lats, not biceps. Depress and retract scapula first, then pull. Squeeze hard when elbows hit your sides.',
+  'machine-row':            'Chest against the pad. Pull elbows back and down — not just back. Shoulders stay down and back throughout. Squeeze rhomboids hard at full contraction. Slow and controlled return to feel the stretch.',
+  'cable-row':              'Sitting tall, slight forward lean at stretch. Pull to lower sternum, elbows close to body. At peak contraction, squeeze shoulder blades together. Don\'t let upper body rock — isolate the pull. Feel lats and mid-back.',
+  'assisted-pullup':        'Start from dead hang with scapula pulled down. Initiate with lats, not arms. Pull chest to bar, elbows driving to hips. Control the descent all the way to full stretch. Don\'t shrug — keep shoulders away from ears.',
+  'barbell-curl':           'Elbows pinned to sides. Full extension at bottom — feel the bicep stretch. Curl to full contraction, forearms vertical or past. No swing. Squeeze hard at the top. Lower slowly for max tension.',
+  'cable-curl':             'Single or both hands. Elbows stay locked at sides. The cable provides constant tension — use it. Full stretch at bottom, full squeeze at top. Hold the peak for 1s. Mind-muscle: focus on the bicep shortening.',
+  'hammer-curl':            'Neutral grip (thumbs up). Elbows stay fixed. Targets brachialis + brachioradialis (outer arm thickness). Same controlled tempo. Feel the forearm load on this one — it should be different from regular curls.',
+  'preacher-curl-plates':   'Upper arm flat on the pad. Full extension at the bottom — important on preacher. Curl to full contraction. The pad isolates — you can\'t cheat with your body. Focus on peak squeeze.',
+  'preacher-curl-machine':  'Adjust so upper arm is fully supported. Use the machine\'s cam for consistent tension. Full stretch, full squeeze. Great for time under tension — try a 3s negative.',
+  'squat':                  'Brace hard before descent. Knees track over toes — push them out. Hit parallel or below. Drive through the whole foot, especially the heel. Keep chest up, don\'t let it fall. Stand tall at the top — don\'t hyperextend.',
+  'hack-squat':             'Feet shoulder-width or slightly wider on plate. Control the descent — no crashing at the bottom. Drive through heels. At the top, don\'t fully lock out to keep quad tension. Lean slightly into the pad for more quad bias.',
+  'leg-press':              'Feet at shoulder width, mid-height on plate. Full depth — thighs to chest. Press through heels. Don\'t lock out knees at the top. Slow descent for more quad work. High feet = more glute/ham; low feet = more quad.',
+  'leg-extension':          'Adjust so knee joint aligns with the machine pivot. Full extension at top — feel the quad squeeze. Slow eccentric (3s down). This is an isolation — mind-muscle is key. Don\'t kick up.',
+  'leg-curl':               'Hamstrings only. Curl heels toward glutes, pause at peak. Slow return. If the machine allows, point toes slightly to hit bicep femoris. Don\'t let hips rise off the pad.',
+  'calf-raise':             'Full stretch at the bottom — heel below the platform. Slow and deliberate up. Hold at peak contraction for 1-2s. Calves are stubborn: high reps + full ROM + time under tension is the formula.',
+  'lat-pullover-cable':     'Cable set high, facing away or toward machine (both work). Arms extended, slight elbow bend. Hinge at shoulder — pull the cable down and back in an arc to your hips. Think "closing your armpit." Feel the lat fully stretching at the start. Keep core braced, no spinal movement.',
+};
 const EX_BY_ID = Object.fromEntries(EXERCISES.map(e=>[e.id,e]));
 const SPLITS = [
   {id:'day1',name:'Chest + Back + Shoulders',exercises:['assisted-pullup','pushup','incline-db-press','lat-pulldown','pec-dec','machine-row','lateral-raise'],supersets:[['assisted-pullup','pushup']]},
@@ -660,11 +691,20 @@ async function openWeightModal(){
 
 /* ============== WORKOUT LOGGER ============== */
 let workoutDraft = null;
-const saveDraft = debounce(async ()=>{
+const DRAFT_KEY = 'lockin_wdraft';
+const saveDraft = debounce(()=>{
   if(!workoutDraft) return;
-  if(workoutDraft.id){await db.workouts.update(workoutDraft.id, workoutDraft);}
-  else{const id = await db.workouts.add(workoutDraft); workoutDraft.id = id;}
-},500);
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(workoutDraft));
+},300);
+
+async function getNextSplitId(){
+  const seq = SPLITS.filter(s=>s.id!=='custom').map(s=>s.id);
+  const last = await db.workouts.orderBy('date').reverse().limit(10).toArray();
+  const lastSplit = last[0]?.splitId;
+  if(!lastSplit) return seq[0];
+  const idx = seq.indexOf(lastSplit);
+  return idx===-1 ? seq[0] : seq[(idx+1)%seq.length];
+}
 
 async function lastSetFor(exId, excludeId=null){
   const all = await db.workouts.orderBy('date').reverse().toArray();
@@ -700,9 +740,19 @@ async function buildSetsForExercise(exId, excludeId=null){
 
 routes.log = async () => {
   const app = document.getElementById('app');
-  const todays = await db.workouts.where('date').equals(today()).toArray();
-  if(!workoutDraft || workoutDraft.date!==today()){
-    workoutDraft = todays[0] || {date:today(), splitId:'day1', intensity:null, exercises:[], created_at:Date.now()};
+  // restore draft from localStorage (survives phone sleep/refresh)
+  if(!workoutDraft){
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(raw){try{workoutDraft=JSON.parse(raw);}catch(e){localStorage.removeItem(DRAFT_KEY);}}
+  }
+  // discard stale draft (different date)
+  if(workoutDraft && workoutDraft.date !== today()){
+    workoutDraft = null; localStorage.removeItem(DRAFT_KEY);
+  }
+  // no draft → build fresh with auto-selected next split
+  if(!workoutDraft){
+    const nextSplit = await getNextSplitId();
+    workoutDraft = {date:today(), splitId:nextSplit, intensity:null, exercises:[], created_at:Date.now()};
   }
   if(!workoutDraft.exercises.length){
     const split = SPLITS.find(s=>s.id===workoutDraft.splitId) || SPLITS[0];
@@ -711,6 +761,7 @@ routes.log = async () => {
       const sets = await buildSetsForExercise(eid);
       return {exerciseId:eid, ssGroup: ssIdx>=0?ssIdx:null, sets};
     }));
+    saveDraft();
   }
 
   app.innerHTML = `
@@ -737,9 +788,7 @@ routes.log = async () => {
   `;
 
   document.querySelectorAll('[data-split]').forEach(b=>b.onclick=async ()=>{
-    if(b.dataset.split === workoutDraft.splitId) return;  // no-op tap on same chip
-    const hasData = (workoutDraft.exercises||[]).some(e=>(e.sets||[]).some(s=>s.weight||s.reps));
-    if(hasData && !confirm('Switch split? This replaces current exercises and any entered sets.')) return;
+    if(b.dataset.split === workoutDraft.splitId) return;
     workoutDraft.splitId = b.dataset.split;
     const split = SPLITS.find(s=>s.id===b.dataset.split);
     workoutDraft.exercises = await Promise.all(split.exercises.map(async eid=>{
@@ -755,8 +804,13 @@ routes.log = async () => {
   document.getElementById('btn-add-ex').onclick = openAddExerciseModal;
   document.getElementById('btn-history').onclick = openWorkoutHistory;
   document.getElementById('btn-finish').onclick = async ()=>{
-    saveDraft.flush();
-    await db.workouts.put(workoutDraft);
+    // only write to DB on explicit finish
+    if(workoutDraft.id){
+      await db.workouts.update(workoutDraft.id, workoutDraft);
+    } else {
+      await db.workouts.add(workoutDraft);
+    }
+    localStorage.removeItem(DRAFT_KEY);
     workoutDraft = null;
     pushState();
     route('today');
@@ -775,6 +829,12 @@ async function renderExList(){
     const nudge = last ? `Try ${(+last.weight)}kg × ${(+last.reps + 1)} or ${(+last.weight + 2.5)}kg × ${(+last.reps)}` : 'first session — set a baseline';
     const ssTag = e.ssGroup!=null ? `<span style="background:var(--recovery);color:#03110D;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.05em;margin-right:6px;">SS${String.fromCharCode(65+e.ssGroup)}</span>` : '';
     const ssBorder = e.ssGroup!=null ? `border-left:2px solid var(--recovery);` : '';
+    const cue = EXERCISE_CUES[e.exerciseId] || null;
+    const cueHtml = cue ? `
+      <button class="text-xs mt-1.5 flex items-center gap-1 text-[var(--text-3)] cue-toggle" data-cue-idx="${i}" style="background:none;border:none;padding:0;cursor:pointer;">
+        <span style="font-size:9px;">▶</span><span>form cue</span>
+      </button>
+      <div class="text-xs text-[var(--text-2)] mt-1.5 cue-body" data-cue-body="${i}" style="display:none;line-height:1.55;">${cue}</div>` : '';
     blocks.push(`
       <div class="card ex-card" style="padding:16px;${ssBorder}" data-idx="${i}">
         <div class="flex justify-between items-start mb-3">
@@ -783,6 +843,7 @@ async function renderExList(){
             <div class="text-[11px] uppercase tracking-wider text-[var(--text-3)] mt-0.5">${meta.muscle}</div>
             <div class="text-xs text-[var(--text-2)] mt-1">${last?`Last: ${last.weight}kg × ${last.reps}`:'no history'}</div>
             <div class="text-xs mt-0.5" style="color:var(--recovery)">${nudge}</div>
+            ${cueHtml}
           </div>
           <button class="text-[var(--text-3)]" data-rm-ex="${i}">✕</button>
         </div>
@@ -829,6 +890,15 @@ async function renderExList(){
     workoutDraft.exercises.splice(+b.dataset.rmEx,1); saveDraft(); renderExList();
   });
   wrap.querySelectorAll('[data-rest]').forEach(b=>b.onclick=()=>startRest(+b.dataset.rest));
+  wrap.querySelectorAll('.cue-toggle').forEach(btn=>btn.onclick=()=>{
+    const idx = btn.dataset.cueIdx;
+    const body = wrap.querySelector(`[data-cue-body="${idx}"]`);
+    const arrow = btn.querySelector('span');
+    if(!body) return;
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    if(arrow) arrow.textContent = open ? '▶' : '▼';
+  });
   // SortableJS: drag handle for explicit reorder (no accidental drags on input)
   if(window.Sortable){
     if(wrap._sortable) wrap._sortable.destroy();
